@@ -66,7 +66,7 @@ class ScratchCodegen:
 
         for node in program.instr:
 
-            current = self.emit_statement(node)
+            current = self.emit_def(node)
 
             if stmt is None:
                 stmt = current
@@ -76,3 +76,33 @@ class ScratchCodegen:
         stmt.first.topLevel = True
         stmt.first.x = 0
         stmt.first.y = 0
+
+    def emit_def(self, define:_stmt.Stmt) -> Statement:
+        if not isinstance(define, _stmt.VariableDeclStmt|_stmt.FunctionDeclStmt):
+            raise RuntimeError("宣言位置が不明")
+        match (define):
+            case _stmt.FunctionDeclStmt():
+                if define.name.ident == "main":
+                    return self.emit_main(define)
+                else:
+                    return self.emit_procedure(define)
+            case _:
+                raise
+
+    def emit_main(self, define:_stmt.Stmt) -> Statement:
+        hat = self.new_block("event_whenflagclicked")
+
+        hat.topLevel = True
+        hat.x = 0
+        hat.y = 0
+    
+        current = Statement(hat, hat)
+    
+        for stmt in func.body:
+            current = self.connect(
+                current,
+                self.emit_statement(stmt)
+            )
+    def emit_procedure(self, define:_stmt.Stmt) -> Statement:
+
+    def emit_statement(self, stmt:_stmt.Stmt)
