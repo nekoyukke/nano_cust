@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from abc import ABC
 
-from ast.base import ASTNode
+from src.ast.base import ASTNode
 
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):

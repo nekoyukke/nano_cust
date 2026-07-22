@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from abc import ABC
 
-from ast.base import ASTNode, Identifier, Parameter
-import ast.expr as _expr
+from src.ast.base import ASTNode, Identifier, Parameter
+import src.ast.expr as _expr
 
 
 @dataclass(repr=False)
