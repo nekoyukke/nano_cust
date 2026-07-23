@@ -5,26 +5,31 @@ from typing import Any, cast
 from enum import Enum
 from abc import ABC
 
-class Identifier(ABC):
+@dataclass
+class TypeDef(ABC):
     pass
 
 @dataclass
-class Generic_Identifier(Identifier):
-    generic: Identifier
-    expr: Identifier
+class Number(TypeDef):
+    pass
 
 @dataclass
-class Union_Identifier(Identifier):
-    identifiers: list[Identifier]
+class String(TypeDef):
+    pass
 
 @dataclass
-class Real_Identifier(Identifier):
-    name:str
+class List(TypeDef):
+    element: TypeDef
+
+
+@dataclass
+class UserDef_TypeDef(TypeDef):
+    name: str
 
 @dataclass
 class Parameter:
     name: str
-    type: Identifier    
+    type: TypeDef    
         
 @dataclass
 class ASTNode(ABC):

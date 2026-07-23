@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from abc import ABC
 
-from src.ast.base import ASTNode, Identifier, Parameter
+from src.ast.base import ASTNode, TypeDef, Parameter
 import src.ast.expr as _expr
 
 
@@ -13,15 +13,22 @@ class Stmt(ASTNode, ABC):
 @dataclass(repr=False)
 class VariableDeclStmt(Stmt):
     name: _expr.Variable
-    contract: Identifier
+    contract: TypeDef
     left: _expr.Expr | None
 
 @dataclass(repr=False)
 class FunctionDeclStmt(Stmt):
     name: _expr.Variable
-    result: Identifier
+    result: TypeDef
     params: list[Parameter]
     body: Stmt
+
+
+@dataclass(repr=False)
+class ClassDeclStmt(Stmt):
+    name: _expr.Variable
+    method: list[FunctionDeclStmt]
+    member: list[VariableDeclStmt]
 
 # そのほか
 
@@ -63,3 +70,12 @@ class ForEachStmt(Stmt):
 @dataclass(repr=False)
 class ImportNode(Stmt):
     source: str
+
+@dataclass(repr=False)
+class SaveNode(Stmt):
+    source: _expr.Variable
+
+
+@dataclass(repr=False)
+class UnSaveNode(Stmt):
+    source: _expr.Variable

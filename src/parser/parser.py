@@ -149,10 +149,48 @@ class Parser():
                 return self.block_node()
             case TokenType.IMPORT:
                 return self.import_node()
+            case TokenType.CLASS:
+                return self.class_node()
+            case TokenType.SAVE:
+                return self.save_node()
+            case TokenType.UNSAVE:
+                return self.unsave_node()
             case _:
                 expr = self._expr_entry()
                 self.consume(TokenType.SEMI, "セミコロンがありません！")
-                return _stmt.ExprStmt(expr.line, expr.col, expr.len, expr)
+                return _stmt.ExprStmt(expr.line, expr.col, expr.len, expr,)
+
+    def save_node(self) -> _stmt.SaveNode:
+            self.advance()
+            variable = self.consume(TokenType.ID, "不明な名称")
+            self.consume(TokenType.SEMI, "セミコロンがありません")
+            return _stmt.SaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
+
+    def unsave_node(self) -> _stmt.UnSaveNode:
+            self.advance()
+            variable = self.consume(TokenType.ID, "不明な名称")
+            self.consume(TokenType.SEMI, "セミコロンがありません")
+            return _stmt.UnSaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
+    
+    def class_node(self) -> _stmt.ClassDeclStmt:
+        a = self.advance()
+        name = self.consume(TokenType.ID, "識別子が不明です")
+        self.consume(TokenType.LBRACE, "不明な始まり方")
+        classes = _stmt.ClassDeclStmt(
+            a.line, a.column, a.len, 
+            _expr.Variable(name.line, name.column, name.len, name.value),
+            [],[]
+        )
+        while not self.check(TokenType.RBRACE):
+            match(self.peek().type):
+                case TokenType.LET:
+                    classes.member += [self.let_node()]
+                case TokenType.FN:
+                    classes.method += [self.fndefine_node()]
+                case _:
+                    self.CallError("不明な呼び出し",classes)
+        self.consume(TokenType.RBRACE, "不明な終わり方")
+        return classes
 
     def import_node(self) -> _stmt.ImportNode:
         a = self.advance()
@@ -160,37 +198,19 @@ class Parser():
         self.consume(TokenType.SEMI, "ないよ")
         return _stmt.ImportNode(a.line, a.column, a.len, string.value)
 
-    # A | B[C]なら
-    # Union(A, Generic(B, C))
-    def get_Union_identifier(self, message:str) -> _base.Identifier:
-        ident = self.get_generic_identifier(message)
-        if not self.check(TokenType.UNION):
-            return ident
-        result = _base.Union_Identifier([ident])
-        while self.match(TokenType.UNION):
-            result.identifiers.append(self.get_generic_identifier(message))
-        return result
-    
-    def get_generic_identifier(self, message:str) -> _base.Identifier:
-        ident = self.get_real_identifier(message)
-        if not self.match(TokenType.LBRACKET):
-            return ident
-        ident_generic = self.get_Union_identifier(message)
-        self.consume(TokenType.RBRACKET, message)
-        return _base.Generic_Identifier(ident_generic, ident)
-    
-    def get_real_identifier(self, message:str) -> _base.Identifier:
-        tok = self.consume(TokenType.ID, message)
-        return _base.Real_Identifier(tok.value)
-
     def get_variable(self, message:str) -> _expr.Variable:
         result = self.consume(TokenType.ID, message)
         return _expr.Variable(result.line, result.column, result.len, result.value)
 
-    def get_contract(self, message:str) -> _base.Identifier:
-        type = self.get_Union_identifier(f"型パース失敗！{message}")
-        return type
-    
+    def get_type(self, message:str) -> _base.TypeDef:
+        tok = self.consume(TokenType.ID, message)
+        if tok.value == "string":return _base.String()
+        if tok.value == "list":
+            type = self.get_type(message)
+            return _base.List(type)
+        if tok.value == "number":return _base.Number()
+        else:return _base.UserDef_TypeDef(tok.value)
+
     def if_node(self) -> _stmt.Ifstmt:
         iftok = self.advance()
         
@@ -264,7 +284,7 @@ class Parser():
             while True:
                 id_str = self.consume(TokenType.ID, "識別子が必要です。").value
                 self.consume(TokenType.COLON, "不明な値")
-                contract_arg = self.get_contract("宣言式")
+                contract_arg = self.get_type("宣言式")
                 args.append(_base.Parameter(id_str, contract_arg))
                 if self.peek().type == TokenType.COMMA:
                     self.advance()
@@ -272,7 +292,7 @@ class Parser():
                 break
         self.consume(TokenType.RPAREN, "かっこ ')' がありません")
         self.consume(TokenType.ARROW, "不明")
-        contract = self.get_contract("関数定義には必須です！！")
+        contract = self.get_type("関数定義には必須です！！")
         body = self._Stmt_entry()
         if body is None:
             self.CallError("不明な構文。正しくはfn <name>(args) -> contract {...}", _expr.Variable(
@@ -306,7 +326,7 @@ class Parser():
         current = self.advance()
         variable = self.get_variable("宣言では識別子が必須です。")
         self.consume(TokenType.COLON, "型不明")
-        contract = self.get_contract("宣言ではコントラクト宣言が必須です")
+        contract = self.get_type("宣言ではコントラクト宣言が必須です")
         if self.peek().type == TokenType.SEMI:
             self.consume(TokenType.SEMI, "セミコロンがありません！")
             return _stmt.VariableDeclStmt(current.line, current.column, current.len, variable, contract, None)

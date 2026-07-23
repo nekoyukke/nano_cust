@@ -42,6 +42,9 @@ class TokenType(Enum):
     RETURN = r'return\b'
     IN = r'in\b'
     LET = r'let\b'
+    CLASS = r'class\b'
+    SAVE = r'save\b'
+    UNSAVE = r'unsave\b'
 
     # キーワード
     LABRACKET = r'<'
