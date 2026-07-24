@@ -4,6 +4,8 @@ from abc import ABC
 
 from src.ast.base import ASTNode
 
+from src.ast.symbol import VariableSymbol
+
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):
     pass
