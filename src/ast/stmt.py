@@ -4,6 +4,7 @@ from abc import ABC
 from src.ast.base import ASTNode, TypeDef, Parameter
 import src.ast.expr as _expr
 
+from src.ast.type import Type
 
 @dataclass(repr=False)
 class Stmt(ASTNode, ABC):
@@ -15,6 +16,8 @@ class VariableDeclStmt(Stmt):
     name: _expr.Variable
     contract: TypeDef
     left: _expr.Expr | None
+    ret_tp: list[Type]|None=None
+    tp: Type|None=None
 
 @dataclass(repr=False)
 class FunctionDeclStmt(Stmt):
@@ -22,6 +25,7 @@ class FunctionDeclStmt(Stmt):
     result: TypeDef
     params: list[Parameter]
     body: Stmt
+    tp: Type|None=None
 
 
 @dataclass(repr=False)
