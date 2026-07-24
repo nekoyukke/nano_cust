@@ -36,5 +36,4 @@ class Collector():
                 raise
 
     def visit_variable(self, node:stmt.VariableDeclStmt) -> symbol.VariableSymbol:
-        node.contract
-        
+        symbol.VariableSymbol(node.name.ident, self.visit_type(node.contract))

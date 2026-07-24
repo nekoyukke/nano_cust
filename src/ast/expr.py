@@ -4,7 +4,7 @@ from abc import ABC
 
 from src.ast.base import ASTNode
 
-from src.ast.symbol import VariableSymbol
+from src.ast.symbol import Symbol
 
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):
@@ -40,6 +40,7 @@ class UnaryExpr(Expr):
 @dataclass(repr=False)
 class Variable(Expr):
     ident: str
+    sym: Symbol | None = None
 
 @dataclass(repr=False)
 class CallExpr(Expr):
