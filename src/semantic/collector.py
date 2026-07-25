@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import src.ast.stmt as stmt
-import src.ast.expr as expr
 import src.ast.base as base
 
-from src.ast.abc_class import Symbol, Type
 
-import src.ast.type as type
 import src.ast.symbol as symbol
 
 from src.ast.scope import Scope
@@ -46,8 +43,16 @@ class Collector():
     def CallError_Symbol(self, node:base.ASTNode, string:str):
         sym = self.scope.sym[string]
         match (sym):
-            case symbol.VariableSymbol()|symbol.FunctionDeclStmt():
-                self.CallError(f"すでに'{string}'は存在します。", node)
+            case symbol.VariableSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.decl.line, sym.decl.col, sym.decl.len)])
+            case symbol.FunctionSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.decl.line, sym.decl.col, sym.decl.len)])
+            case symbol.ClassSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.decl.line, sym.decl.col, sym.decl.len)])
+            case symbol.MemberSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.val.decl.line, sym.val.decl.col, sym.val.decl.len)])
+            case symbol.MethodSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.fnc.decl.line, sym.fnc.decl.col, sym.fnc.decl.len)])
             case _:
                 self.CallError(f"すでに'{string}'は存在します。", node)
 
@@ -70,9 +75,44 @@ class Collector():
             case _:
                 raise
 
-    def visit_variable(self, node:stmt.VariableDeclStmt) -> symbol.VariableSymbol:
+    def visit_variable(self, node:stmt.VariableDeclStmt, flag:bool = False) -> symbol.VariableSymbol:
         string = node.name.ident
         if string in self.scope.sym:
-            raise self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("重なる宣言場所", sym[string])])
-        self.scope.sym[string]=symbol.VariableSymbol(string, node)
-        return symbol.VariableSymbol(string, node)
+            self.CallError_Symbol(node, string)
+        sym = symbol.VariableSymbol(string, node)
+        if flag:
+            return sym
+        self.scope.sym[string] = sym
+        return sym
+
+    def visit_class(self, node:stmt.ClassDeclStmt) -> symbol.ClassSymbol:
+        string = node.name.ident
+        sym = symbol.ClassSymbol(
+            string,
+            [],
+            [],
+            node
+        )
+        if string in self.scope.sym:
+            self.CallError_Symbol(node, string)
+        members:list[symbol.MemberSymbol] = []
+        for i in node.member:
+            members.append(symbol.MemberSymbol(self.visit_variable(i, True), sym))
+        methods:list[symbol.MethodSymbol] = []
+        for i in node.method:
+            methods.append(symbol.MethodSymbol(self.visit_function(i, True), sym))
+        sym.member = members
+        sym.method = methods
+        self.scope.sym[string] = sym
+        self.ctx.types[string] = sym
+        return sym
+
+    def visit_function(self, node:stmt.FunctionDeclStmt, flag:bool = False) -> symbol.FunctionSymbol:
+        string = node.name.ident
+        if string in self.scope.sym:
+            self.CallError_Symbol(node, string)
+        sym = symbol.FunctionSymbol(string, [symbol.VariableSymbol(i.name, node) for i in node.params], node)
+        if flag:
+            return sym
+        self.scope.sym[string] = sym
+        return sym

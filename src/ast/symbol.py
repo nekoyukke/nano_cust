@@ -3,25 +3,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.ast.abc_class import Symbol
-from src.ast.stmt import ClassDeclStmt, FunctionDeclStmt, VariableDeclStmt
+from src.ast.stmt import Stmt
 
 @dataclass
 class VariableSymbol(Symbol):
     name: str
-    decl: VariableDeclStmt
+    decl: Stmt
 
 @dataclass
 class ClassSymbol(Symbol):
     name: str
     member: list[MemberSymbol]
     method: list[MethodSymbol]
-    decl: ClassDeclStmt
+    decl: Stmt
 
 @dataclass
 class FunctionSymbol(Symbol):
     name: str
     parms: list[VariableSymbol]
-    decl: FunctionDeclStmt
+    decl: Stmt
 
 @dataclass
 class MemberSymbol(Symbol):
