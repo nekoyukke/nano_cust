@@ -161,16 +161,16 @@ class Parser():
                 return _stmt.ExprStmt(expr.line, expr.col, expr.len, expr,)
 
     def save_node(self) -> _stmt.SaveNode:
-            self.advance()
-            variable = self.consume(TokenType.ID, "不明な名称")
-            self.consume(TokenType.SEMI, "セミコロンがありません")
-            return _stmt.SaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
+        self.advance()
+        variable = self.consume(TokenType.ID, "不明な名称")
+        self.consume(TokenType.SEMI, "セミコロンがありません")
+        return _stmt.SaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
 
     def unsave_node(self) -> _stmt.UnSaveNode:
-            self.advance()
-            variable = self.consume(TokenType.ID, "不明な名称")
-            self.consume(TokenType.SEMI, "セミコロンがありません")
-            return _stmt.UnSaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
+        self.advance()
+        variable = self.consume(TokenType.ID, "不明な名称")
+        self.consume(TokenType.SEMI, "セミコロンがありません")
+        return _stmt.UnSaveNode(variable.line, variable.column, variable.len, _expr.Variable(variable.line, variable.column, variable.len, variable.value))
     
     def class_node(self) -> _stmt.ClassDeclStmt:
         a = self.advance()
@@ -205,6 +205,7 @@ class Parser():
     def get_type(self, message:str) -> _base.TypeDef:
         tok = self.consume(TokenType.ID, message)
         if tok.value == "string":return _base.String()
+        if tok.value == "boolean":return _base.Boolean()
         if tok.value == "list":
             type = self.get_type(message)
             return _base.List(type)

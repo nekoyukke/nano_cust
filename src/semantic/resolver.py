@@ -13,6 +13,8 @@ from src.ast.scope import Scope
 
 from src.ast.context import Context
 
+import src.ast.type as types
+
 from utils.error.collector import KinakoCollectorError
 from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
@@ -23,6 +25,7 @@ class Resolver():
         self.scope:Scope = scp
         self.ctx:Context = ctx
         self.error:list[KinakoBaseError] = []
+
 
     def CallError(
             self, message:str ,node:base.ASTNode,
@@ -59,7 +62,7 @@ class Resolver():
             case _:
                 self.CallError(f"すでに'{string}'は存在します。", node)
 
-    def collect(self):
+    def resolve(self):
         self.visit_Program(self.program)
         return self.scope
 
@@ -72,31 +75,68 @@ class Resolver():
             case stmt.VariableDeclStmt():
                 self.visit_variable(node)
             case stmt.FunctionDeclStmt():
+                self.scope = self.scope.push()
                 self.visit_function(node)
+                self.scope = self.scope.pop()
             case stmt.ClassDeclStmt():
+                self.scope = self.scope.push()
                 self.visit_class(node)
+                self.scope = self.scope.pop()
             case stmt.Ifstmt():
+                self.scope = self.scope.push()
                 self.visit_if(node)
+                self.scope = self.scope.pop()
             case stmt.WhileStmt():
+                self.scope = self.scope.push()
                 self.visit_while(node)
+                self.scope = self.scope.pop()
             case stmt.ForEachStmt():
+                self.scope = self.scope.push()
                 self.visit_foreach(node)
-            case stmt.BlockStmt():
-                self.visit_block(node)
-            case stmt.ImportNode():
-                self.visit_import(node)
-            case stmt.SaveNode():
-                self.visit_save(node)
-            case stmt.UnSaveNode():
-                self.visit_unsave(node)
-            case stmt.ExprStmt():
-                self.visit_exprstmt(node)
+                self.scope = self.scope.pop()
             case stmt.ReturnStmt():
                 self.visit_return(node)
+            case stmt.BlockStmt():
+                self.scope = self.scope.push()
+                for i in node.instr:
+                    self.visit_stmt(i)
+                self.scope = self.scope.pop()
             case _:
-                self.CallError("不明", node)
+                return
 
-    def visit_expr(self, node:expr.Expr):
+    def visit_expr(self, node:expr.Expr) -> types.Type:
         match(node):
+            case expr.Variable():
+                sym = self.scope.lookup(node.ident)
+                node.sym = sym
+                if sym in self.ctx.val_type:
+                    # ok
+                    pass
+                elif sym in self.ctx.func_type:
+                    pass
+                elif sym in self.ctx.types:
+                    pass
+                else:
+                    self.CallError("エラー！！！", node)
+            case expr.BinaryExpr():
+                lt = self.visit_expr(node.left)
+                rt = self.visit_expr(node.right)
+                if lt == rt:
+                    return lt
+                self.CallError(f"型が違います。{lt}と{rt}", node)
+            case expr.LogicExpr():
+                lt = self.visit_expr(node.left)
+                rt = self.visit_expr(node.right)
+                if lt == rt:
+                    return types.BooleanType()
+                self.CallError(f"型が違います。{lt}と{rt}", node)
+            case expr.AssignExpr():
+                if not isinstance(node.left, expr.AccessExpr|expr.Variable):
+                    self.CallError("呼び出し可能値ではありません", node)
+                lt = self.visit_expr(node.left)
+                rt = self.visit_expr(node.right)
+                if lt == rt:
+                    return lt
+                self.CallError(f"型が違います。{lt}と{rt}", node)
             case _:
-                
+                pass

@@ -18,9 +18,22 @@ class StringType(BuildinType):
     pass
 
 @dataclass
+class BooleanType(BuildinType):
+    pass
+
+@dataclass
 class ListType(BuildinType):
     element: Type
 
 @dataclass
 class UserDefType(Type):
     sym: Symbol
+
+@dataclass
+class Function(Type):
+    ret: Type
+    parms: list[Type]
+
+@dataclass
+class Class(Type):
+    name: str

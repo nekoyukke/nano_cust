@@ -18,6 +18,10 @@ class String(TypeDef):
     pass
 
 @dataclass
+class Boolean(TypeDef):
+    pass
+
+@dataclass
 class List(TypeDef):
     element: TypeDef
 

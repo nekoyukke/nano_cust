@@ -65,9 +65,9 @@ class LogicExpr(Expr):
 
 class AssignKind(Enum):
     ASSIGN = r'='
-    PULS = r'+='
+    PULS = r'\+='
     MINUS = r'-='
-    MULT = r'*='
+    MULT = r'\*='
     DIV = r'/='
 
 @dataclass(repr=False)

@@ -19,3 +19,9 @@ class Scope():
     def pop(self):
         if self.parent:return self.parent
         return self
+    
+    def lookup(self, name:str) -> Symbol|None:
+        if name in self.sym:
+            return self.sym[name]
+        if self.parent: return self.parent.lookup(name)
+        return None
