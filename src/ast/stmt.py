@@ -18,7 +18,6 @@ class VariableDeclStmt(Stmt):
     name: _expr.Variable
     contract: TypeDef
     left: _expr.Expr | None
-    ret_tp: list[Type]|None=None
     tp: Type|None=None
 
 @dataclass(repr=False)

@@ -33,7 +33,3 @@ class UserDefType(Type):
 class Function(Type):
     ret: Type
     parms: list[Type]
-
-@dataclass
-class Class(Type):
-    name: str

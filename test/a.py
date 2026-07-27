@@ -12,7 +12,7 @@ from src.ast.context import Context
 def parse(string: str):
     return Parser(Lexer(string).tokenize(), string).parse()
 
-def collect(program:ProgramStmt, source:str, ctx:Context = Context({},{})):
+def collect(program:ProgramStmt, source:str, ctx:Context = Context({},{}, {})):
     sc = Collector(program, source, ctx).collect()
     return (sc, ctx)
 
@@ -24,7 +24,10 @@ class Vector3 {
     let y:int;
     let z:int;
 }
+fn add(x:int, y:int) -> int {
+    return x+y;
+}
 """
 
-print(ast:=parse(string))
+(ast:=parse(string))
 print(collect(ast,string))

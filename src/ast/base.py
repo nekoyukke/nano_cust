@@ -118,7 +118,9 @@ class ASTNode(ABC):
         # 数値、真偽値など
         return repr(value)
     
-    def __repr__(self) -> str:
+    def __repr__(self, a:bool = False) -> str:
+        if a:
+            return ""
         return self._format_repr(indent=0)
     
     def get_child(self) -> list[ASTNode]:
