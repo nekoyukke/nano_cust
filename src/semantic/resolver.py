@@ -117,29 +117,36 @@ class Resolver():
                 return False
             case stmt.FunctionDeclStmt():
                 self.visit_function(node) # we may not need this
+                return False
             case stmt.ClassDeclStmt():
                 self.visit_class(node) # too.
+                return False
             case stmt.Ifstmt():
-                self.visit_if(node)
+                return self.visit_if(node)
             case stmt.WhileStmt():
-                self.visit_while(node)
+                return self.visit_while(node)
             case stmt.ForEachStmt():
-                self.visit_foreach(node)
+                return self.visit_foreach(node)
             case stmt.ReturnStmt():
-                self.visit_return(node)
+                return self.visit_return(node)
             case stmt.BlockStmt():
                 self.scope = self.scope.push()
+                ret = False
                 for i in node.instr:
-                    self.visit_stmt(i)
+                    ret = ret or self.visit_stmt(i)
                 self.scope = self.scope.pop()
+                return ret
             case _:
                 for i in node.get_child():
                     if isinstance(i, stmt.Stmt):self.visit_stmt(i)
                     if isinstance(i, expr.Expr):self.visit_expr(i)
+                return False
 
     def visit_return(self, node:stmt.ReturnStmt):
         tp = self.visit_expr(node.expr)
-        self.ret_tp
+        if self.ret_tp != tp:
+            self.CallError(f"型が一致しません。宣言元:{self.ret_tp}実際の方:{tp}", node)
+        return True
 
     def visit_foreach(self, node:stmt.ForEachStmt):
         # (=^.^=) < hello ~
@@ -147,13 +154,13 @@ class Resolver():
         var_tp = self.visit_expr(node.variable) # now now cow now cow cow
         if not isinstance(itt_tp, types.ListType):
             self.CallError(f"繰り返し不可能な入力。{itt_tp}", node)
-            return
+            return False
         if not var_tp: # if var is not none
             self.CallError(f"不明な型。{var_tp}", node)
-            return
+            return False
         if not itt_tp.element == var_tp:
             self.CallError(f"繰り返し不可能な型。{itt_tp} not eq {var_tp}", node)
-            return
+            return False
         self.scope = self.scope.push() # push corn
         # smybloo
         sym = symbol.VariableSymbol(
@@ -162,31 +169,34 @@ class Resolver():
         )
         self.scope.sym[node.variable.ident] = sym
         self.ctx.val_type[sym] = var_tp
-        self.visit_stmt(node.loop)
+        ret = self.visit_stmt(node.loop)
         self.scope = self.scope.pop() # pop corn!!!
+        return ret
 
     def visit_while(self, node:stmt.WhileStmt):
         cond_tp = self.visit_expr(node.cond) # (cond_tp looks like Condom)
         if not isinstance(cond_tp, types.BooleanType):
             self.CallError(f"Boolean値のみの入力。{cond_tp}", node)
-            return
+            return False
         self.scope = self.scope.push() # push corn
-        self.visit_stmt(node.loop)
+        ret = self.visit_stmt(node.loop)
         self.scope = self.scope.pop() # pop corn!!!
+        return ret
 
     def visit_if(self, node:stmt.Ifstmt):
         cond_tp = self.visit_expr(node.cond)
         if not isinstance(cond_tp, types.BooleanType):
             self.CallError(f"Boolean値のみの入力。{cond_tp}", node)
-            return
+            return False
         # what???????
         self.scope = self.scope.push() # push corn <= ???
-        self.visit_stmt(node.then_stmt)
+        ret =  self.visit_stmt(node.then_stmt)
         self.scope = self.scope.pop() # pop corn!!!
         self.scope = self.scope.push() # push corn <= ???
-        if node.else_stmt:self.visit_stmt(node.else_stmt)
+        if node.else_stmt: ret = ret and self.visit_stmt(node.else_stmt)
+        else: ret = ret and False
         self.scope = self.scope.pop() # pop corn!!!
-        return
+        return ret
         
     def visit_variable(self, node:stmt.VariableDeclStmt):
         tp:types.Type = self.TypeDef2Type(node.contract)
