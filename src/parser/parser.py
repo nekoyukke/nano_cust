@@ -210,6 +210,7 @@ class Parser():
             type = self.get_type(message)
             return _base.List(type)
         if tok.value == "number":return _base.Number()
+        if tok.value == "int":return _base.Number()
         else:return _base.UserDef_TypeDef(tok.value)
 
     def if_node(self) -> _stmt.Ifstmt:

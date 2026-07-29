@@ -11,7 +11,7 @@ from src.ast.symbol import Symbol
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):
     pass
-
+    
 class BinaryKind(Enum):
     PLUS = "+"
     MINUS = "-"

@@ -7,48 +7,44 @@ from src.ast.abc_class import Symbol
 @dataclass
 class Scope():
     sym: dict[str, Symbol] = field(default_factory=dict[str, Symbol])
-    parent: Scope|None=None
+    parent: Scope | None = None
 
     def push(self):
         return Scope(parent=self)
 
     def deep(self) -> int:
-        if self.parent:return self.parent.deep()+1
+        if self.parent: return self.parent.deep() + 1
         return 0
 
     def pop(self):
-        if self.parent:return self.parent
+        if self.parent: return self.parent
         return self
     
-    def lookup(self, name:str) -> Symbol|None:
+    def lookup(self, name: str) -> Symbol | None:
         if name in self.sym:
             return self.sym[name]
         if self.parent: return self.parent.lookup(name)
         return None
 
     def get_global(self) -> Scope:
-        if self.parent:return self.parent
+        if self.parent: return self.parent.get_global()
         return self
-    
+
     def __repr__(self) -> str:
-        valid_fields: list[str] = []
-        
-        for f in fields(self):
-            value = getattr(self, f.name)
-            
-            # 2. 辞書型（sym: dict[str, Symbol] など）の整形処理
-            if isinstance(value, dict):
-                if not value:
-                    formatted_val = "{}"
-                else:
-                    # 要素ごとに改行 ＋ インデント（スペース4個）を入れる
-                    items_str = ",\n    ".join(
-                        f"{k!r}: {v!r}" for k, v in value.items()
-                    )
-                    formatted_val = f"{{\n    {items_str}\n}}"
-            else:
-                formatted_val = repr(value)
-                
-            valid_fields.append(f"{f.name}={formatted_val}")
-            
-        return f"{self.__class__.__name__}({', '.join(valid_fields)})"
+        # ID（メモリ番地）の下4桁（16進数）を文字列化するヘルパー関数
+        def format_symbol(s: Symbol) -> str:
+            short_id = f"{id(s):x}"[-4:]  # 下4桁を取得（6桁にするなら -6:）
+            return f"'{s.name}'#{short_id} from {s.__class__.__name__}" # TODO: Fix this
+
+        # sym 辞書内の Symbol を改行 ＋ インデント付きで整形
+        if not self.sym:
+            sym_str = "{}"
+        else:
+            sym_items = [
+                f"    {k!r}: {format_symbol(v)}" 
+                for k, v in self.sym.items()
+            ]
+            sym_str = "{\n" + ",\n".join(sym_items) + "\n}"
+
+        parent_str = repr(self.parent) if self.parent else "None"
+        return f"Scope(sym={sym_str}, parent={parent_str})"

@@ -57,8 +57,12 @@ class Collector():
                 self.CallError(f"すでに'{string}'は存在します。", node)
 
     def collect(self):
+        self.init()
         self.visit_Program(self.program)
         return self.scope
+
+    def init(self):
+        self.ctx.types
 
     def visit_Program(self, program:stmt.ProgramStmt):
         for instr in program.instr:

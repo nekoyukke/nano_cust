@@ -3,7 +3,7 @@ from abc import ABC
 
 from src.ast.base import ASTNode
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Symbol(ABC):
     def __repr__(self) -> str:
         valid_fields:list[str] = []

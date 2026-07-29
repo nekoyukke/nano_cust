@@ -223,10 +223,12 @@ class Resolver():
             return self.CallError("Oops...不明なシンボル[管理者向け]", node)
         self.scope = self.scope.push()# push | new scope
         parms: list[types.Type] = []
-        for i, j in zip(sym.parms, node.params): # fuckin'program
-            self.scope.sym[i.name] = i
-            self.ctx.val_type[i] = self.TypeDef2Type(j.type)
-            parms.append(self.ctx.val_type[i]) # what !?
+        # for i, j in zip(sym.parms, node.params): # fuckin'program
+        for i in range(len(sym.parms)): # fuckin'program
+            self.scope.sym[sym.parms[i].name] = sym.parms[i]
+            # print("",sym.parms[i], hex(id(sym.parms[i])))
+            self.ctx.val_type[sym.parms[i]] = self.TypeDef2Type(node.params[i].type)
+            parms.append(self.ctx.val_type[sym.parms[i]]) # what !?
         # symbol
         tp:types.Function = types.Function(
             self.TypeDef2Type(node.result),
@@ -245,26 +247,35 @@ class Resolver():
         sym_cls = self.ctx.types[node.name.ident]
         # fuckin'program
         self.scope = self.scope.push()
-        for mb, ms in zip(node.member, sym_cls.member): # ms looks like Microsoft.
+        # for mb, ms in zip(node.member, sym_cls.member): # ms looks like Microsoft.
+        for i in range(len(node.member)):
+            mb, ms = node.member[i], sym_cls.member[i]
             tp:types.Type = self.TypeDef2Type(mb.contract)
             if mb.left:
                 if (tp_left := self.visit_expr(mb.left)):
                     if tp != tp_left:
                         self.CallError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", node)
+                        return
+            self.ctx.val_type[ms.val] = tp
             mb.tp = tp
             mb.name.sym = ms
             self.scope.sym[mb.name.ident] = ms
-        for md,cmd in zip(node.method, sym_cls.method):
+        # for md,cmd in zip(node.method, sym_cls.method):
+        for i in range(len(node.method)):
+            md, cmd = node.method[i], sym_cls.method[i]
             # md looks like MDMA
             sym = cmd # command prompt
             if not isinstance(sym, symbol.FunctionSymbol):
                 return self.CallError("Oops...不明なシンボル[管理者向け]", node)
             self.scope = self.scope.push()# push | new scope
             parms: list[types.Type] = []
-            for i, j in zip(sym.parms, md.params): # fuckin'program
-                self.scope.sym[i.name] = i
-                self.ctx.val_type[i] = self.TypeDef2Type(j.type)
-                parms.append(self.ctx.val_type[i]) # what !?
+            # for i, j in zip(sym.parms, md.params): # fuckin'program
+            for j in range(len(sym.parms)): # fuckin'program
+                sp = sym.parms[j]
+                mp = md.params[j]
+                self.scope.sym[sp.name] = sp
+                self.ctx.val_type[sp] = self.TypeDef2Type(mp.type)
+                parms.append(self.ctx.val_type[sp]) # what !?
             # symbol
             tp_:types.Function = types.Function(
                 self.TypeDef2Type(md.result),
@@ -328,5 +339,68 @@ class Resolver():
                 if lt == rt:
                     return lt
                 self.CallError(f"型が違います。{lt}と{rt}", node)
+            case expr.UnaryExpr():
+                # 単項演算子 (+x, -x など)
+                return self.visit_expr(node)
+
+            case expr.CallExpr():
+                # 関数・メソッド呼び出し (foo(a, b))
+                pass
+            case expr.IndexExpr():
+                # 配列・リストアクセス (arr[i])
+                base = self.visit_expr(node.expr)
+                idx = self.visit_expr(node.index)
+                if idx
+
+            case expr.MemberExpr():
+                # メンバーアクセス (obj.field)
+                base = self.visit_expr(node.expr)
+                if not base: # eq if base is not none
+                    self.CallError("不明な型", node)
+                    return
+                # ok
+                match (base):
+                    case types.UserDefType():
+                        sym = base.sym
+                        if sym not in set(self.ctx.types.values()) or not isinstance(sym, symbol.ClassSymbol):
+                            self.CallError("不明[Errrorororoororororor]", node)
+                            return None
+                        mm = [i.val.name for i in sym.member]
+                        mb = [i.fnc.name for i in sym.method]
+                        if node.member.ident in mm:
+                            # ok
+                            idx = mm.index(node.member.ident)
+                            return self.ctx.val_type[sym.member[idx].val]
+                        if node.member.ident in mb:
+                            # ok
+                            idx = mb.index(node.member.ident)
+                            return self.ctx.func_type[sym.method[idx].fnc]
+                        # うんこ(Unknown)
+                        self.CallError("不明なメンバー名", node)
+                    case types.NumberType():
+                        pass
+                    case types.ListType():
+                        if node.member.ident == "push":
+                            return types.Function(types.BooleanType(), [base.element])
+                        if node.member.ident == "pop":
+                            return types.Function(base.element, [])
+                    case types.StringType():
+                        pass
+                    case types.BooleanType():
+                        pass
+                    case _:
+                        raise
+            case expr.BoolLiteral():
+                return types.BooleanType()
+
+            case expr.IntLiteral():
+                return types.NumberType()
+
+            case expr.FloatLiteral():
+                return types.NumberType()
+
+            case expr.StringLiteral():
+                return types.StringType()
+
             case _:
                 pass
