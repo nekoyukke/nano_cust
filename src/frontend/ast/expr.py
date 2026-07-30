@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 from abc import ABC
 
-from src.ast.base import ASTNode
+from frontend.ast.base import ASTNode
 
-from src.ast.symbol import Symbol
+from frontend.ast.symbol import Symbol
 
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):

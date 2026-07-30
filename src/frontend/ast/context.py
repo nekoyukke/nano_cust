@@ -2,21 +2,30 @@ from dataclasses import dataclass
 
 from typing import Any
 
-from src.ast.symbol import ClassSymbol, VariableSymbol, FunctionSymbol
-from src.ast.abc_class import Type
-from src.ast.type import Function
-from src.ast.abc_class import Symbol
+from frontend.ast.symbol import *
+from frontend.ast.abc_class import Type
+from frontend.ast.type import Function
+from frontend.ast.abc_class import Symbol
 
 @dataclass
 class Context():
     types: dict[str, ClassSymbol]
     val_type: dict[VariableSymbol, Type]
     func_type: dict[FunctionSymbol, Function]
+    method_type: dict[MethodSymbol, Function]
+    member_type: dict[MemberSymbol, Type]
+    args_type: dict[ArgsSymbol, Type]
 
     def __repr__(self) -> str:
         def fmt_sym(s: Symbol) -> str:
             short_id = f"{id(s):x}"[-4:]
-            return f"'{s.name}'#{short_id} from {s.__class__.__name__}" # TODO: Fix this
+            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol):
+                return f"'{s.name}'#{short_id} from {s.__class__.__name__}"
+            elif isinstance(s, MemberSymbol):
+                return f"'{s.val.name}'#{short_id} from {s.__class__.__name__}"
+            elif isinstance(s, MethodSymbol):
+                return f"'{s.fnc.name}'#{short_id} from {s.__class__.__name__}"
+            return ""
 
         def fmt_dict(d: dict[Any,Any]) -> str:
             if not d:
@@ -34,5 +43,8 @@ class Context():
             f"  types={fmt_dict(self.types)},\n"
             f"  val_type={fmt_dict(self.val_type)},\n"
             f"  func_type={fmt_dict(self.func_type)}\n"
+            f"  args_type={fmt_dict(self.args_type)}\n"
+            f"  member_type={fmt_dict(self.member_type)}\n"
+            f"  method_type={fmt_dict(self.method_type)}\n"
             f")"
         )

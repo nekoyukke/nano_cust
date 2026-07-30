@@ -3,17 +3,17 @@ from __future__ import annotations
 # resolve and typecheck.
 # Notably, it processes members and methods as well.
 
-import src.ast.stmt as stmt
-import src.ast.base as base
-import src.ast.expr as expr
+import frontend.ast.stmt as stmt
+import frontend.ast.base as base
+import frontend.ast.expr as expr
 
-import src.ast.symbol as symbol
+import frontend.ast.symbol as symbol
 
-from src.ast.scope import Scope
+from frontend.ast.scope import Scope
 
-from src.ast.context import Context
+from frontend.ast.context import Context
 
-import src.ast.type as types
+import frontend.ast.type as types
 
 from utils.error.collector import KinakoCollectorError
 from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
@@ -60,6 +60,8 @@ class Resolver():
                 self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.val.decl.line, sym.val.decl.col, sym.val.decl.len)])
             case symbol.MethodSymbol():
                 self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.fnc.decl.line, sym.fnc.decl.col, sym.fnc.decl.len)])
+            case symbol.ArgsSymbol():
+                self.CallError(f"すでに'{string}'は存在します。", node, [KinakoRelatedInfo("かぶっている宣言場所", sym.decl.line, sym.decl.col, sym.decl.len)])
             case _:
                 self.CallError(f"すでに'{string}'は存在します。", node)
 
@@ -227,8 +229,8 @@ class Resolver():
         for i in range(len(sym.parms)): # fuckin'program
             self.scope.sym[sym.parms[i].name] = sym.parms[i]
             # print("",sym.parms[i], hex(id(sym.parms[i])))
-            self.ctx.val_type[sym.parms[i]] = self.TypeDef2Type(node.params[i].type)
-            parms.append(self.ctx.val_type[sym.parms[i]]) # what !?
+            self.ctx.args_type[sym.parms[i]] = self.TypeDef2Type(node.params[i].type)
+            parms.append(self.ctx.args_type[sym.parms[i]]) # what !?
         # symbol
         tp:types.Function = types.Function(
             self.TypeDef2Type(node.result),
@@ -236,7 +238,9 @@ class Resolver():
         )
         node.tp = tp;self.ctx.func_type[sym] = tp
         self.ret_tp = tp.ret
-        self.visit_stmt(node.body) # body
+        res = self.visit_stmt(node.body) # body
+        if not res: # trueならok
+            self.CallError("functionから帰りません。", node)
         self.scope = self.scope.pop()# pop
         self.ret_tp = None
         return
@@ -256,7 +260,7 @@ class Resolver():
                     if tp != tp_left:
                         self.CallError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", node)
                         return
-            self.ctx.val_type[ms.val] = tp
+            self.ctx.member_type[ms] = tp
             mb.tp = tp
             mb.name.sym = ms
             self.scope.sym[mb.name.ident] = ms
@@ -265,26 +269,27 @@ class Resolver():
             md, cmd = node.method[i], sym_cls.method[i]
             # md looks like MDMA
             sym = cmd # command prompt
-            if not isinstance(sym, symbol.FunctionSymbol):
-                return self.CallError("Oops...不明なシンボル[管理者向け]", node)
             self.scope = self.scope.push()# push | new scope
             parms: list[types.Type] = []
             # for i, j in zip(sym.parms, md.params): # fuckin'program
-            for j in range(len(sym.parms)): # fuckin'program
-                sp = sym.parms[j]
+            for j in range(len(sym.fnc.parms)): # fuckin'program
+                sp = sym.fnc.parms[j]
                 mp = md.params[j]
                 self.scope.sym[sp.name] = sp
-                self.ctx.val_type[sp] = self.TypeDef2Type(mp.type)
-                parms.append(self.ctx.val_type[sp]) # what !?
+                self.ctx.args_type[sp] = self.TypeDef2Type(mp.type)
+                parms.append(self.ctx.args_type[sp]) # what !?
             # symbol
             tp_:types.Function = types.Function(
                 self.TypeDef2Type(md.result),
                 parms
             )
-            md.tp = tp_;self.ctx.func_type[sym] = tp_
-            self.visit_stmt(md.body) # body
+            md.tp = tp_;self.ctx.method_type[sym] = tp_
             self.ret_tp = tp_.ret
+            res = self.visit_stmt(md.body) # body
+            if not res: # trueならok
+                self.CallError("functionから帰りません。", node)
             self.scope = self.scope.pop()# pop
+            self.ret_tp = None
         self.scope = self.scope.pop()# pop corn🍿
         return
 
@@ -300,15 +305,25 @@ class Resolver():
                     # ok
                     if isinstance(sym, symbol.VariableSymbol) and isinstance(sym.decl, stmt.VariableDeclStmt):
                         return sym.decl.tp
+                    if isinstance(sym, symbol.VariableSymbol) and isinstance(sym.decl, stmt.ForEachStmt):
+                        sym_ = sym.decl.variable.sym
+                        if isinstance(sym_, symbol.VariableSymbol):
+                            return self.ctx.val_type[sym_]
                     # else:
-                elif sym in set(self.ctx.func_type): # tp looks like toilet paper.
+                elif sym in self.ctx.func_type: # tp looks like toilet paper.
                     if isinstance(sym, symbol.FunctionSymbol) and isinstance(sym.decl, stmt.FunctionDeclStmt) and sym.decl.tp:
                         return sym.decl.tp
                     # else:
-                elif sym in set(self.ctx.types.values()) and isinstance(sym, symbol.ClassSymbol):
+                elif sym in self.ctx.types.values() and isinstance(sym, symbol.ClassSymbol):
                     # self.ctx.func_type looks like fuck_type
                     return types.UserDefType(sym=sym)
-                self.CallError("エラー！！！", node) # fuckin error
+                elif sym in self.ctx.args_type and isinstance(sym, symbol.ArgsSymbol):
+                    return self.ctx.args_type[sym]
+                elif sym in self.ctx.method_type and isinstance(sym, symbol.MethodSymbol):
+                    return self.ctx.method_type[sym]
+                elif sym in self.ctx.member_type and isinstance(sym, symbol.MemberSymbol):
+                    return self.ctx.member_type[sym]
+                self.CallError(f"不明なエラー！！！", node, help = [KinakoHelp(f"scope:{self.ctx}"), KinakoHelp(f"symbol:{sym}#{f"{id(sym):x}"[-4:]}")]) # fuckin error
                 return None
             case expr.BinaryExpr():
                 lt = self.visit_expr(node.left)
@@ -344,13 +359,48 @@ class Resolver():
                 return self.visit_expr(node)
 
             case expr.CallExpr():
-                # 関数・メソッド呼び出し (foo(a, b))
-                pass
+                # 関数呼び出し (foo(a, b))
+                call = self.visit_expr(node.call)
+                type_list: list[types.Type] = []
+                for i in node.args:
+                    i_t = self.visit_expr(i)
+                    if i_t:
+                        type_list.append(i_t)
+                    else:
+                        self.CallError(f"不明な値。{i}", node)
+                        return
+                if not isinstance(call, types.Function):
+                    self.CallError(f"呼び出し不可能な型, {call}", node.call)
+                    return
+                if len(type_list) != len(call.parms):
+                    self.CallError(
+                        f"引数の個数が一致しません。期待: {len(call.parms)}個, 実際: {len(type_list)}個",
+                        node
+                    )
+                    return None
+
+                mismatches:list[str] = []
+                for i, (actual, expected) in enumerate(zip(type_list, call.parms)):
+                    if actual != expected:
+                        mismatches.append(f"第{i + 1}引数 (期待: {expected}, 実際: {actual})")
+
+                if mismatches:
+                    error_msg = "引数の型が一致しません:\n  - " + "\n  - ".join(mismatches)
+                    self.CallError(error_msg, node)
+                    return None
+                # 製鋼
+                return call.ret
             case expr.IndexExpr():
                 # 配列・リストアクセス (arr[i])
                 base = self.visit_expr(node.expr)
                 idx = self.visit_expr(node.index)
-                if idx
+                if not isinstance(idx, types.NumberType):
+                    self.CallError(f"インデックスアクセスはnumberが強制されます{idx}", node)
+                    return None
+                if not isinstance(base, types.ListType):
+                    self.CallError(f"添え字不可能な値, {base}", node)
+                    return None
+                return base.element
 
             case expr.MemberExpr():
                 # メンバーアクセス (obj.field)
@@ -370,11 +420,11 @@ class Resolver():
                         if node.member.ident in mm:
                             # ok
                             idx = mm.index(node.member.ident)
-                            return self.ctx.val_type[sym.member[idx].val]
+                            return self.ctx.member_type[sym.member[idx]]
                         if node.member.ident in mb:
                             # ok
                             idx = mb.index(node.member.ident)
-                            return self.ctx.func_type[sym.method[idx].fnc]
+                            return self.ctx.method_type[sym.method[idx]]
                         # うんこ(Unknown)
                         self.CallError("不明なメンバー名", node)
                     case types.NumberType():

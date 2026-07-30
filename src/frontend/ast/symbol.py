@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.ast.abc_class import Symbol
-from src.ast.stmt import Stmt
+from frontend.ast.abc_class import Symbol
+from frontend.ast.stmt import Stmt
 
 @dataclass(repr=False)
 class VariableSymbol(Symbol):
@@ -19,15 +19,15 @@ class ClassSymbol(Symbol):
     method: list[MethodSymbol]
     decl: Stmt
     def __hash__(self):
-        return hash((self.name, tuple(self.member), tuple(self.method), id(self.decl)))
+        return hash((self.name, id(self.member), id(self.method), id(self.decl)))
 
 @dataclass(repr=False)
 class FunctionSymbol(Symbol):
     name: str
-    parms: list[VariableSymbol]
+    parms: list[ArgsSymbol]
     decl: Stmt
     def __hash__(self):
-        return hash((self.name, tuple(self.parms), id(self.decl)))
+        return hash((self.name, id(self.parms), id(self.decl)))
 
 @dataclass(repr=False, unsafe_hash=True)
 class MemberSymbol(Symbol):
@@ -38,3 +38,11 @@ class MemberSymbol(Symbol):
 class MethodSymbol(Symbol):
     fnc: FunctionSymbol
     cls: ClassSymbol
+
+@dataclass(repr=False, unsafe_hash=False)
+class ArgsSymbol(Symbol):
+    name: str
+    decl: Stmt
+    idx: int
+    def __hash__(self):
+        return hash((self.name, id(self.decl), self.idx))

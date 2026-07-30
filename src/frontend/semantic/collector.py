@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import src.ast.stmt as stmt
-import src.ast.base as base
+import frontend.ast.stmt as stmt
+import frontend.ast.base as base
 
 
-import src.ast.symbol as symbol
+import frontend.ast.symbol as symbol
 
-from src.ast.scope import Scope
+from frontend.ast.scope import Scope
 
-from src.ast.context import Context
+from frontend.ast.context import Context
 
 from utils.error.collector import KinakoCollectorError
 from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
@@ -81,11 +81,11 @@ class Collector():
 
     def visit_variable(self, node:stmt.VariableDeclStmt, flag:bool = False) -> symbol.VariableSymbol:
         string = node.name.ident
-        if string in self.scope.sym:
-            self.CallError_Symbol(node, string)
         sym = symbol.VariableSymbol(string, node)
         if flag:
             return sym
+        if string in self.scope.sym:
+            self.CallError_Symbol(node, string)
         self.scope.sym[string] = sym
         return sym
 
@@ -115,7 +115,7 @@ class Collector():
         string = node.name.ident
         if string in self.scope.sym:
             self.CallError_Symbol(node, string)
-        sym = symbol.FunctionSymbol(string, [symbol.VariableSymbol(i.name, node) for i in node.params], node)
+        sym = symbol.FunctionSymbol(string, [symbol.ArgsSymbol(j.name, node, i) for i,j in enumerate(node.params)], node)
         if flag:
             return sym
         self.scope.sym[string] = sym

@@ -1,15 +1,15 @@
-from src.parser.parser import Parser
-from src.lexer.lexer import Lexer
+from frontend.parser.parser import Parser
+from frontend.lexer.lexer import Lexer
 
-from src.semantic.collector import Collector
-from src.ast.stmt import ProgramStmt
+from frontend.semantic.collector import Collector
+from frontend.ast.stmt import ProgramStmt
 
-from src.ast.context import Context
+from frontend.ast.context import Context
 
 def parse(string: str):
     return Parser(Lexer(string).tokenize(), string).parse()
 
-def collect(program:ProgramStmt, source:str, ctx:Context = Context({},{}, {})):
+def collect(program:ProgramStmt, source:str, ctx:Context = Context({},{}, {}, {}, {}, {})):
     sc = Collector(program, source, ctx).collect()
     return (sc, ctx)
 

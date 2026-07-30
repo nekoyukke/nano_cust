@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 
-from src.ast.abc_class import Symbol
+from frontend.ast.abc_class import Symbol
+from frontend.ast.symbol import *
 
 @dataclass
 class Scope():
@@ -34,7 +35,14 @@ class Scope():
         # ID（メモリ番地）の下4桁（16進数）を文字列化するヘルパー関数
         def format_symbol(s: Symbol) -> str:
             short_id = f"{id(s):x}"[-4:]  # 下4桁を取得（6桁にするなら -6:）
-            return f"'{s.name}'#{short_id} from {s.__class__.__name__}" # TODO: Fix this
+            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol):
+                return f"'{s.name}'#{short_id} from {s.__class__.__name__}"
+            elif isinstance(s, MemberSymbol):
+                return f"'{s.val.name}'#{short_id} from {s.__class__.__name__}"
+            elif isinstance(s, MethodSymbol):
+                return f"'{s.fnc.name}'#{short_id} from {s.__class__.__name__}"
+            return ""
+
 
         # sym 辞書内の Symbol を改行 ＋ インデント付きで整形
         if not self.sym:

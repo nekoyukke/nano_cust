@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from abc import ABC
 
-from src.ast.base import ASTNode, TypeDef, Parameter
-import src.ast.expr as _expr
+from frontend.ast.base import ASTNode, TypeDef, Parameter
+import frontend.ast.expr as _expr
 
-from src.ast.type import Type
+from frontend.ast.type import Type
 
 @dataclass(repr=False)
 class Stmt(ASTNode, ABC):

@@ -1,10 +1,10 @@
 from typing import Callable
 
-from src.lexer.token import Token
-from src.lexer.tokentype import TokenType
-import src.ast.base as _base
-import src.ast.expr as _expr
-import src.ast.stmt as _stmt
+from frontend.lexer.token import Token
+from frontend.lexer.tokentype import TokenType
+import frontend.ast.base as _base
+import frontend.ast.expr as _expr
+import frontend.ast.stmt as _stmt
 from utils.error.syntax import KinakoSyntaxError
 from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
