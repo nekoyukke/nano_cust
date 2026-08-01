@@ -1,12 +1,12 @@
 from typing import Callable
 
-from frontend.lexer.token import Token
-from frontend.lexer.tokentype import TokenType
-import frontend.ast.base as _base
-import frontend.ast.expr as _expr
-import frontend.ast.stmt as _stmt
-from utils.error.syntax import KinakoSyntaxError
-from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
+from src.frontend.lexer.token import Token
+from src.frontend.lexer.tokentype import TokenType
+import src.frontend.ast.base as _base
+import src.frontend.ast.expr as _expr
+import src.frontend.ast.stmt as _stmt
+from src.utils.error.syntax import KinakoSyntaxError
+from src.utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
 class Parser():
     def __init__(self, tokens:list[Token], source:str) -> None:

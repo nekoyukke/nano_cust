@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 from abc import ABC
 
-from frontend.ast.base import ASTNode
+from src.frontend.ast.base import ASTNode
 
-from frontend.ast.symbol import Symbol
+from src.frontend.ast.symbol import Symbol
 
 @dataclass(repr=False)
 class Expr(ASTNode, ABC):
@@ -30,9 +30,6 @@ class BinaryExpr(Expr):
 class UnaryKind(Enum):
     PLUS = "+"
     MINUS = "-"
-    MULT = "*"
-    DIV = "/"
-    MOD = "%"
 
 @dataclass(repr=False)
 class UnaryExpr(Expr):

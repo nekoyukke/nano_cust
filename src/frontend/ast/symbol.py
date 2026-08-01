@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from frontend.ast.abc_class import Symbol
-from frontend.ast.stmt import Stmt
+from src.frontend.ast.abc_class import Symbol
+from src.frontend.ast.stmt import Stmt
 
 @dataclass(repr=False)
 class VariableSymbol(Symbol):

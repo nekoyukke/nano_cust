@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from abc import ABC
 
-from frontend.ast.abc_class import Symbol, Type
+from src.frontend.ast.abc_class import Symbol, Type
 
 @dataclass
 class BuildinType(Type, ABC):

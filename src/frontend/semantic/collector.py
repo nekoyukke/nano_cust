@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import frontend.ast.stmt as stmt
-import frontend.ast.base as base
+import src.frontend.ast.stmt as stmt
+import src.frontend.ast.base as base
 
 
-import frontend.ast.symbol as symbol
+import src.frontend.ast.symbol as symbol
 
-from frontend.ast.scope import Scope
+from src.frontend.ast.scope import Scope
 
-from frontend.ast.context import Context
+from src.frontend.ast.context import Context
 
-from utils.error.collector import KinakoCollectorError
-from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
+from src.utils.error.collector import KinakoCollectorError
+from src.utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
 class Collector():
     def __init__(self, program: stmt.ProgramStmt, source:str, ctx:Context) -> None:
@@ -99,12 +99,17 @@ class Collector():
         )
         if string in self.scope.sym:
             self.CallError_Symbol(node, string)
+        sym_class_element:symbol.Symbol
         members:list[symbol.MemberSymbol] = []
-        for i in node.member:
-            members.append(symbol.MemberSymbol(self.visit_variable(i, True), sym))
+        for i in range(len(node.member)):
+            sym_class_element = symbol.MemberSymbol(self.visit_variable(node.member[i], True), sym)
+            members.append(sym_class_element)
+            node.member[i].name.sym = sym_class_element
         methods:list[symbol.MethodSymbol] = []
-        for i in node.method:
-            methods.append(symbol.MethodSymbol(self.visit_function(i, True), sym))
+        for i in range(len(node.method)):
+            sym_class_element = symbol.MethodSymbol(self.visit_function(node.method[i], True), sym)
+            methods.append(sym_class_element)
+            node.method[i].name.sym = sym_class_element
         sym.member = members
         sym.method = methods
         self.scope.sym[string] = sym
@@ -119,4 +124,5 @@ class Collector():
         if flag:
             return sym
         self.scope.sym[string] = sym
+        node.name.sym = sym
         return sym

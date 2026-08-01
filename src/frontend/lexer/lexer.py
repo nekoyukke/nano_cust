@@ -1,7 +1,7 @@
 import re
 
-from frontend.lexer.token import Token
-from frontend.lexer.tokentype import TokenType
+from src.frontend.lexer.token import Token
+from src.frontend.lexer.tokentype import TokenType
 
 class Lexer():
     def __init__(self, source:str) -> None:

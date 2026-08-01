@@ -3,20 +3,20 @@ from __future__ import annotations
 # resolve and typecheck.
 # Notably, it processes members and methods as well.
 
-import frontend.ast.stmt as stmt
-import frontend.ast.base as base
-import frontend.ast.expr as expr
+import src.frontend.ast.stmt as stmt
+import src.frontend.ast.base as base
+import src.frontend.ast.expr as expr
 
-import frontend.ast.symbol as symbol
+import src.frontend.ast.symbol as symbol
 
-from frontend.ast.scope import Scope
+from src.frontend.ast.scope import Scope
 
-from frontend.ast.context import Context
+from src.frontend.ast.context import Context
 
-import frontend.ast.type as types
+import src.frontend.ast.type as types
 
-from utils.error.collector import KinakoCollectorError
-from utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
+from src.utils.error.collector import KinakoCollectorError
+from src.utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
 class Resolver():
     def __init__(self, program: stmt.ProgramStmt, source:str, ctx:Context, scp:Scope) -> None:

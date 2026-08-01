@@ -1,7 +1,7 @@
 from dataclasses import dataclass, fields
 from abc import ABC
 
-from frontend.ast.base import ASTNode
+from src.frontend.ast.base import ASTNode
 
 @dataclass(unsafe_hash=True)
 class Symbol(ABC):

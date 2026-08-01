@@ -2,10 +2,10 @@ from dataclasses import dataclass
 
 from typing import Any
 
-from frontend.ast.symbol import *
-from frontend.ast.abc_class import Type
-from frontend.ast.type import Function
-from frontend.ast.abc_class import Symbol
+from src.frontend.ast.symbol import *
+from src.frontend.ast.abc_class import Type
+from src.frontend.ast.type import Function
+from src.frontend.ast.abc_class import Symbol
 
 @dataclass
 class Context():

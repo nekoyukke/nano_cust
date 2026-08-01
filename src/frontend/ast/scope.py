@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from frontend.ast.abc_class import Symbol
-from frontend.ast.symbol import *
+from src.frontend.ast.abc_class import Symbol
+from src.frontend.ast.symbol import *
 
 @dataclass
 class Scope():

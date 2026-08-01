@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from utils.error.base import KinakoBaseError
+from src.utils.error.base import KinakoBaseError
 
 @dataclass
 class ErrorLists():
