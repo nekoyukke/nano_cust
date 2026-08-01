@@ -17,3 +17,4 @@ class Module():
     func: list[Function]
     lists: list[ListInfo]
     variables: list[Variable]
+    entry: Function | None = None
