@@ -5,6 +5,7 @@ import src.frontend.ast.stmt as stmt
 
 from src.frontend.ast.context import Context
 import src.frontend.ast.symbol as symbol
+import src.frontend.ast.type as type
 
 from src.backend.ir.boolexpr import *
 from src.backend.ir.expr import *
@@ -27,6 +28,7 @@ class IRGenerator:
         # symbolの変換
         self.module_variable: dict[symbol.Symbol, Variable] = {}
         self.module_function: dict[symbol.FunctionSymbol, int] = {}
+
         # counts
         self.count = 0
         self.temp_pos = 0
@@ -37,15 +39,15 @@ class IRGenerator:
         self.alloc_stack: ListInfo
         self.scope_stack: ListInfo
         self.Frame: ListInfo
-        # 共通ではないっす
+        # sprict 共通ではないっす
         self.temps: list[Variable] = []
         # sprite整理
         self.sprite: list[Sprite] = []
         # spriteの今のindex
         self.sprite_pos:int = 0
 
-    def get_name(self) -> str:
-        """名前取得"""
+    def get_name(self) -> str: 
+        """名前取得 TODO"""
         # eazy <= no!!!
         return "__global__"
 
@@ -96,6 +98,10 @@ class IRGenerator:
 
     def make_sprite(self, sym: symbol.SpriteSymbol):
         """sprite用の環境を作っちゃう"""
+        sprite = Sprite([], [], [])
+        self.sprite.append(sprite)
+        self.module.sprites.append(sprite)
+        self.sprite_pos = len(self.sprite) - 1
         self.make_runtime()
         self.make_storage(sym)
 
@@ -126,17 +132,34 @@ class IRGenerator:
         self.sprite[self.sprite_pos].lists.append(self.Frame)
         return
 
-    def make_storage(self,  sym: symbol.SpriteSymbol):
-        self.ctx.sprites_variable[sym]
-        self.make_variable(sym)
-        self.make_list(sym)
+    def make_storage(self, sym: symbol.SpriteSymbol):
+        list_scratch: list[symbol.VariableSymbol|symbol.MemberSymbol|str] = []
+        variable_scratch: list[symbol.VariableSymbol|symbol.MemberSymbol|str] = []
+        for i in self.ctx.sprites_variable[sym]:
+            tp = self.ctx.val_type[i]
+            if isinstance(tp, type.ListType):
+                list_scratch.append(i)
+            else:
+                variable_scratch.append(i)
+        for i in self.ctx.types.values():
+            list_scratch += i.member
+            list_scratch += ["__class__address__"]
+        self.make_storage_variable(variable_scratch)
+        self.make_storage_list(list_scratch)
 
-    def make_variable(self,  sym: symbol.SpriteSymbol):
-        return
+    def make_storage_variable(self, element: list[symbol.VariableSymbol|symbol.MemberSymbol|str]):
+        for sym in element:
+            # if member symbol -> sym.cls + sym.val.name
+            # if str -> strで作るだけ作って、登録なしで
+            variable = self.new_variable(sym.name)
+            self.module_variable[sym] = variable
+            self.sprite[self.sprite_pos].variables.append(variable)
 
-    def make_list(self,  sym: symbol.SpriteSymbol):
-        return
-
+    def make_storage_list(self, element: list[symbol.VariableSymbol|symbol.MemberSymbol|str]):
+        for sym in element:
+            # if member symbol -> sym.cls + sym.val.name
+            lst = self.new_list(sym.name)
+            self.sprite[self.sprite_pos].lists.append(lst)
 
     def visit_program(self):
 
