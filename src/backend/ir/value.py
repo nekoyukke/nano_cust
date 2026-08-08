@@ -8,6 +8,7 @@ class Value(ABC):
 @dataclass
 class Variable(Value):
     id: int
+    sprite: int
     name: str
 
 @dataclass

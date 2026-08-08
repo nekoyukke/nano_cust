@@ -124,6 +124,7 @@ class Collector():
             self.CallError_Symbol(node, string)
         sym = symbol.SpriteSymbol(string, [], node)
         self.scope.sym[string] = sym
+        self.ctx.sprite[string] = sym
         function_names: set[str] = set()
         for function in node.functions:
             if function.name.ident in function_names:

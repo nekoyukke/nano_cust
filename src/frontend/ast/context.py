@@ -15,12 +15,16 @@ class Context():
     method_type: dict[MethodSymbol, Function]
     member_type: dict[MemberSymbol, Type]
     args_type: dict[ArgsSymbol, Type]
+    sprite: dict[str, SpriteSymbol]
+    sprites_variable: dict[SpriteSymbol, list[VariableSymbol]]
+    sprites_func: dict[SpriteSymbol, list[FunctionSymbol]]
+    sprites_args: dict[SpriteSymbol, list[ArgsSymbol]]
     entry: FunctionSymbol | None = None
 
     def __repr__(self) -> str:
         def fmt_sym(s: Symbol) -> str:
             short_id = f"{id(s):x}"[-4:]
-            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol):
+            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol | SpriteSymbol):
                 return f"'{s.name}'#{short_id} from {s.__class__.__name__}"
             elif isinstance(s, MemberSymbol):
                 return f"'{s.val.name}'#{short_id} from {s.__class__.__name__}"
@@ -46,6 +50,9 @@ class Context():
             f"  func_type={fmt_dict(self.func_type)}\n"
             f"  args_type={fmt_dict(self.args_type)}\n"
             f"  member_type={fmt_dict(self.member_type)}\n"
-            f"  method_type={fmt_dict(self.method_type)}\n"
+            f"  sprite={fmt_dict(self.sprite)}\n"
+            f"  sprites_variable={fmt_dict(self.sprites_variable)}\n"
+            f"  sprites_func={fmt_dict(self.sprites_func)}\n"
+            f"  sprites_args={fmt_dict(self.sprites_args)}\n"
             f")"
         )

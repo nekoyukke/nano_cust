@@ -18,15 +18,15 @@ from src.backend.ir.value import *
 
 class IRGenerator:
     def __init__(self, Program:stmt.ProgramStmt, source:str, ctx:Context) -> None:
-        self.module = Module([],[],[])
+        self.module = Module([], None)
         self.program:stmt.ProgramStmt = Program
         self.ctx:Context = ctx
         # fuckin containers
-        self.name_list: list[str] = []
         # fuckint meens "fuck int" and "fuckin t"
+        
+        # symbolの変換
         self.module_variable: dict[symbol.Symbol, Variable] = {}
         self.module_function: dict[symbol.FunctionSymbol, int] = {}
-        self.module_list: dict[str, int] = {}
         # counts
         self.count = 0
         self.temp_pos = 0
@@ -37,24 +37,28 @@ class IRGenerator:
         self.alloc_stack: ListInfo
         self.scope_stack: ListInfo
         self.Frame: ListInfo
+        # 共通ではないっす
         self.temps: list[Variable] = []
-        self.current_instr: list[Stmt] | None = None
-        self.sprite_functions: dict[str, list[tuple[stmt.FunctionDeclStmt, symbol.FunctionSymbol, Function]]] = {}
-    
+        # sprite整理
+        self.sprite: list[Sprite] = []
+        # spriteの今のindex
+        self.sprite_pos:int = 0
+
     def get_name(self) -> str:
-        # eazy
-        if self.name_list:
-            return "__global__.__"+"__.__".join(self.name_list) + "__"
-        return "__global__."
+        """名前取得"""
+        # eazy <= no!!!
+        return "__global__"
 
     def new_variable(self, name:str, es:bool = False) -> Variable:
+        """変数追加"""
         self.count+=1
         if es:
             # nc is nano-cust
-            return Variable(self.count, "__nc_runtime__."+name)
-        return Variable(self.count, self.get_name()+name)
+            return Variable(self.count, self.sprite_pos, "__nc_runtime__."+name)
+        return Variable(self.count, self.sprite_pos, name)
 
     def new_list(self, name:str, es:bool = False) -> ListInfo:
+        """新しいリスト"""
         self.count+=1
         if es:
             # nc is nano-cust
@@ -62,140 +66,98 @@ class IRGenerator:
         return ListInfo(self.get_name()+name)
 
     def reset_temp(self):
+        """tempをリセット（stmt毎を想定）"""
         self.temp_pos = 0
 
     def get_temp(self):
+        """あたらしいtempを生成して返す"""
         if (self.temp_pos >= len(self.temps)):
             # new one
             temp = self.new_variable(f"temp{len(self.temps)}", True)
             self.temps.append(temp)
-            self.module.variables.append(temp)
+            self.sprite[self.sprite_pos].variables.append(temp)
         temp = self.temps[self.temp_pos]
         self.temp_pos+=1
         return temp
 
     def visit(self) -> Module:
+        "その名の通り。"
         # what
-        self.make_runtime()
-        self.make_storage()
-        self.visit_program()
+        for i in self.program.instr:
+            if isinstance(i, stmt.SpriteDeclStmt):
+                self.visit_sprite(i)
         return self.module
 
-    def make_runtime(self):
+    def visit_sprite(self, node:stmt.SpriteDeclStmt):
+        """sprite作る"""
+        node.name
+        sym = self.ctx.sprite[node.name.ident]
+        self.make_sprite(sym)        
+
+    def make_sprite(self, sym: symbol.SpriteSymbol):
+        """sprite用の環境を作っちゃう"""
+        self.make_runtime()
+        self.make_storage(sym)
+
+    def make_runtime(self,):
+        """runtimeを作る"""
         # need neet now cow
         self.make_runtime_variable()
         self.make_runtime_list()
         return
 
     def make_runtime_variable(self):
+        """特に変数"""
         self.trash = self.new_variable("__trash", True)
-        self.module.variables.append(self.trash)
+        self.sprite[self.sprite_pos].variables.append(self.trash)
         return
 
     def make_runtime_list(self):
+        """オブジェクト関連"""
         self.object_address: ListInfo = self.new_list("__Object_address__", True)
         self.object_clstype: ListInfo = self.new_list("__Object_CLSType", True)
         self.alloc_stack: ListInfo = self.new_list("__Aloc_Stack__", True)
         self.scope_stack: ListInfo = self.new_list("__Scope_Stack__", True)
         self.Frame: ListInfo = self.new_list("__Frame__", True)
-        self.module.lists.append(self.object_address)
-        self.module.lists.append(self.object_clstype)
-        self.module.lists.append(self.alloc_stack)
-        self.module.lists.append(self.scope_stack)
-        self.module.lists.append(self.Frame)
+        self.sprite[self.sprite_pos].lists.append(self.object_address)
+        self.sprite[self.sprite_pos].lists.append(self.object_clstype)
+        self.sprite[self.sprite_pos].lists.append(self.alloc_stack)
+        self.sprite[self.sprite_pos].lists.append(self.scope_stack)
+        self.sprite[self.sprite_pos].lists.append(self.Frame)
         return
 
-    def make_storage(self):
-        self.make_variable()
-        self.make_list()
+    def make_storage(self,  sym: symbol.SpriteSymbol):
+        self.ctx.sprites_variable[sym]
+        self.make_variable(sym)
+        self.make_list(sym)
 
-    def make_variable(self):
+    def make_variable(self,  sym: symbol.SpriteSymbol):
         return
 
-    def make_list(self):
+    def make_list(self,  sym: symbol.SpriteSymbol):
         return
 
 
     def visit_program(self):
-        sprites = [node for node in self.program.instr if isinstance(node, stmt.SpriteDeclStmt)]
-        for sprite in sprites:
-            self.declare_sprite(sprite)
-        for sprite in sprites:
-            self.generate_sprite(sprite)
 
-    def declare_sprite(self, node:stmt.SpriteDeclStmt):
-        self.name_list.append(node.name.ident)
-        functions: list[tuple[stmt.FunctionDeclStmt, symbol.FunctionSymbol, Function]] = []
-        for function_node in node.functions:
-            function_symbol = function_node.name.sym
-            if not isinstance(function_symbol, symbol.FunctionSymbol):
-                raise ValueError(f"Unresolved Sprite function: {function_node.name.ident}")
-            parameters: list[Variable] = []
-            for parameter_symbol in function_symbol.parms:
-                parameter = self.new_variable(parameter_symbol.name)
-                self.module.variables.append(parameter)
-                self.module_variable[parameter_symbol] = parameter
-                parameters.append(parameter)
-            function = Function(
-                f"{node.name.ident}.{function_node.name.ident}",
-                parameters,
-                []
-            )
-            self.module_function[function_symbol] = len(self.module.func)
-            self.module.func.append(function)
-            functions.append((function_node, function_symbol, function))
-        self.sprite_functions[node.name.ident] = functions
-        self.name_list.pop()
-
-    def generate_sprite(self, node:stmt.SpriteDeclStmt):
-        functions = self.sprite_functions[node.name.ident]
-        for function_node, function_symbol, function in functions:
-            previous_instr = self.current_instr
-            self.current_instr = function.instr
-            self.reset_temp()
-            self.visit_stmt(function_node.body)
-            self.current_instr = previous_instr
-            if function_symbol is self.ctx.entry:
-                self.module.entry = function
-
-    def emit(self, instruction: Stmt):
-        if self.current_instr is None:
-            raise ValueError("IR instruction emitted outside a function")
-        self.current_instr.append(instruction)
-    
     def visit_stmt(self, node:stmt.Stmt) -> Stmt:
         # what the fuck!?
         match(node):
             # 宣言系
             case stmt.VariableDeclStmt():
-                variable_symbol = node.name.sym
-                if not isinstance(variable_symbol, symbol.VariableSymbol):
-                    raise ValueError(f"Unresolved variable: {node.name.ident}")
-                variable = self.new_variable(node.name.ident)
-                self.module.variables.append(variable)
-                self.module_variable[variable_symbol] = variable
-                if node.left is not None:
-                    self.emit(Move(variable, self.visit_expr(node.left)))
-                return
+                pass
 
             # 式・返値系
             case stmt.ExprStmt():
-                value = self.visit_expr(node.expr)
-                if isinstance(value, Call):
-                    self.emit(Move(self.trash, value))
-                return
+                pass
             case stmt.ReturnStmt():
-                self.emit(Return(self.visit_expr(node.expr)))
-                return
+                pass
 
             # ブロック系
             case stmt.BlockStmt():
-                for instruction in node.instr:
-                    self.visit_stmt(instruction)
-                return
+                pass
             case stmt.ProgramStmt():
-                self.visit_program()
-                return
+                pass
 
             # 制御構文系
             case stmt.Ifstmt():
@@ -221,25 +183,9 @@ class IRGenerator:
         match node:
             # 二項演算・単項演算・論理・代入
             case expr.BinaryExpr():
-                left = self.visit_expr(node.left)
-                right = self.visit_expr(node.right)
-                match node.op:
-                    case expr.BinaryKind.PLUS:
-                        return Add(left, right)
-                    case expr.BinaryKind.MINUS:
-                        return Sub(left, right)
-                    case expr.BinaryKind.MULT:
-                        return Mul(left, right)
-                    case expr.BinaryKind.DIV:
-                        return Div(left, right)
-                    case expr.BinaryKind.MOD:
-                        return Mod(left, right)
-                raise ValueError(f"Unsupported binary operator: {node.op}")
+                pass
             case expr.UnaryExpr():
-                value = self.visit_expr(node.expr)
-                if node.op == expr.UnaryKind.PLUS:
-                    return value
-                return Sub(ImmExpr(Number(0)), value)
+                pass
             case expr.LogicExpr():
                 pass
             case expr.AssignExpr():
@@ -247,21 +193,9 @@ class IRGenerator:
             
             # 変数・呼び出し
             case expr.Variable():
-                if node.sym in self.module_variable:
-                    return VariableExpr(self.module_variable[node.sym])
-                raise ValueError(f"Variable has no IR storage: {node.ident}")
+                pass
             case expr.CallExpr():
-                function_symbol: symbol.FunctionSymbol | None = None
-                if isinstance(node.call, expr.MemberExpr) and isinstance(node.call.member.sym, symbol.FunctionSymbol):
-                    function_symbol = node.call.member.sym
-                elif isinstance(node.call, expr.Variable) and isinstance(node.call.sym, symbol.FunctionSymbol):
-                    function_symbol = node.call.sym
-                if function_symbol not in self.module_function:
-                    raise ValueError("Call target has no generated IR function")
-                return Call(
-                    self.module_function[function_symbol],
-                    [self.visit_expr(argument) for argument in node.args]
-                )
+                pass
             
             # アクセス系 (AccessExpr)
             case expr.IndexExpr():

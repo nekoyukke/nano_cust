@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from abc import ABC
 
-from src.frontend.ast.base import ASTNode
+from src.frontend.ast.base import ASTNode, TypeDef
 
 from src.frontend.ast.symbol import Symbol
 
@@ -116,5 +116,8 @@ class NullLiteral(Literal):
 class StringLiteral(Literal):
     string:str
 
+@dataclass(repr=False)
+class NewExpr(Expr):
+    types: TypeDef
 
 kinds = LogicKind | UnaryKind | AssignKind | BinaryKind

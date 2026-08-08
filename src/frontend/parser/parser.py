@@ -114,17 +114,25 @@ class Parser():
         return self._Program()
     
     def _Program(self) -> _stmt.ProgramStmt:
-        stmts: list[_stmt.Stmt] = []
+        stmts: list[_stmt.ClassDeclStmt | _stmt.SpriteDeclStmt] = []
         while not self.is_at_end():
-            if self.check(TokenType.FN):
-                token = self.peek()
-                self.CallError(
-                    "トップレベルにfnは書けません。Sprite内で定義してください",
-                    _base.ASTNode(token.line, token.column, token.len)
-                )
-            stmt = self._Stmt_entry()
-            if stmt is None:
-                continue
+            match(self.peek().type):
+                case TokenType.CLASS:
+                    stmt = self.class_node()
+                case TokenType.SPRITE:
+                    stmt = self.sprite_node()
+                case TokenType.FN:
+                    token = self.peek()
+                    self.CallError(
+                        "トップレベルにfnは書けません。Sprite内で定義してください",
+                        _base.ASTNode(token.line, token.column, token.len)
+                    )
+                case _:
+                    token = self.peek()
+                    self.CallError(
+                        "トップレベルにClass / Sprite以外の文は書けません。",
+                        _base.ASTNode(token.line, token.column, token.len)
+                    )
             stmts.append(stmt)
             continue
         return _stmt.ProgramStmt(0,0,0, stmts)
@@ -207,9 +215,9 @@ class Parser():
         functions: list[_stmt.FunctionDeclStmt] = []
         while not self.check(TokenType.RBRACE):
             if self.is_at_end():
-                self.CallError("Sprite body is not closed", name)
+                self.CallError("Sprite body is not closed", _expr.Variable(name.line, name.column, name.len, name.value))
             if not self.check(TokenType.FN):
-                self.CallError("Sprite body may only contain function declarations", sprite)
+                self.CallError("Sprite body may only contain function declarations", _expr.Variable(sprite_token.line, sprite_token.column, sprite_token.len, sprite_token.value))
             functions.append(self.fndefine_node())
         self.consume(TokenType.RBRACE, "Sprite body must end with '}'")
         return _stmt.SpriteDeclStmt(
@@ -228,8 +236,12 @@ class Parser():
         result = self.consume(TokenType.ID, message)
         return _expr.Variable(result.line, result.column, result.len, result.value)
 
-    def get_type(self, message:str) -> _base.TypeDef:
+    def get_type(self, message:str, isbuildin:bool = False) -> _base.TypeDef:
         tok = self.consume(TokenType.ID, message)
+        if isbuildin:
+            if tok.value in ("string", "boolean", "list", "number", "int"):
+                self.CallError(message + "ビルドインの型は指定できません。", _expr.Variable(tok.line, tok.column, tok.len, tok.value))
+            return _base.UserDef_TypeDef(tok.value)
         if tok.value == "string":return _base.String()
         if tok.value == "boolean":return _base.Boolean()
         if tok.value == "list":
@@ -459,6 +471,13 @@ class Parser():
 
 
     def _expr_entry(self) -> _expr.Expr:
+        return self._expr_new()
+
+    def _expr_new(self) -> _expr.Expr:
+        tok=self.peek()
+        if self.match(TokenType.NEW):
+            types = self.get_type("ヒープに設置する不明な型", True)
+            return _expr.NewExpr(tok.line, tok.column, tok.len, types)
         return self.assignment()
     
     def assignment(self) -> _expr.Expr:

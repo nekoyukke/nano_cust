@@ -35,7 +35,7 @@ class Scope():
         # ID（メモリ番地）の下4桁（16進数）を文字列化するヘルパー関数
         def format_symbol(s: Symbol) -> str:
             short_id = f"{id(s):x}"[-4:]  # 下4桁を取得（6桁にするなら -6:）
-            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol):
+            if isinstance(s, VariableSymbol | ClassSymbol | FunctionSymbol | ArgsSymbol | SpriteSymbol):
                 return f"'{s.name}'#{short_id} from {s.__class__.__name__}"
             elif isinstance(s, MemberSymbol):
                 return f"'{s.val.name}'#{short_id} from {s.__class__.__name__}"

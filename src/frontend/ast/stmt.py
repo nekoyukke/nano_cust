@@ -57,7 +57,7 @@ class BlockStmt(Stmt):
 
 @dataclass(repr=False)
 class ProgramStmt(Stmt):
-    instr: list[Stmt]
+    instr: list[SpriteDeclStmt | ClassDeclStmt]
 
 # 制御構文系
 @dataclass(repr=False)

@@ -15,8 +15,12 @@ class ListInfo():
     list_name : str
 
 @dataclass
-class Module():
+class Sprite():
     func: list[Function]
     lists: list[ListInfo]
     variables: list[Variable]
-    entry: Function | None = None
+
+@dataclass
+class Module():
+    sprites: list[Sprite]
+    entry_point : Function | None = None

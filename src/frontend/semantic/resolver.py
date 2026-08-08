@@ -26,6 +26,7 @@ class Resolver():
         self.ctx:Context = ctx
         self.error:list[KinakoBaseError] = []
         self.ret_tp: types.Type | None = None
+        self.sprite_sym:symbol.SpriteSymbol | None = None
 
 
     def CallError(
@@ -91,25 +92,25 @@ class Resolver():
     def visit_Program(self, program:stmt.ProgramStmt):
         for instr in program.instr:
             match (instr):# isn't smart
-                case stmt.VariableDeclStmt():
-                    # ohohohohoho
-                    # self.visit_variable(instr) # miss!!!
-                    sym = self.scope.lookup(instr.name.ident)
-                    if not sym:
-                        continue # need error message.(maybe)
-                    if not isinstance(sym, symbol.VariableSymbol):
-                        continue # need erro...
-                    tp:types.Type = self.TypeDef2Type(instr.contract) # toilet paper
-                    if instr.left: # toilet paper
-                        if (tp_left := self.visit_expr(instr.left)): # toilet paper
-                            if tp != tp_left: # toilet paper
-                                self.CallError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", instr)
-                    instr.tp = tp # toilet paper
-                    instr.name.sym = sym
-                    self.scope.sym[instr.name.ident] = sym
-                    self.ctx.val_type[sym] = tp # ha?
-                case stmt.FunctionDeclStmt():
-                    self.visit_function(instr)
+                # case stmt.VariableDeclStmt():
+                #     # ohohohohoho
+                #     # self.visit_variable(instr) # miss!!!
+                #     sym = self.scope.lookup(instr.name.ident)
+                #     if not sym:
+                #         continue # need error message.(maybe)
+                #     if not isinstance(sym, symbol.VariableSymbol):
+                #         continue # need erro...
+                #     tp:types.Type = self.TypeDef2Type(instr.contract) # toilet paper
+                #     if instr.left: # toilet paper
+                #         if (tp_left := self.visit_expr(instr.left)): # toilet paper
+                #             if tp != tp_left: # toilet paper
+                #                 self.CallError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", instr)
+                #     instr.tp = tp # toilet paper
+                #     instr.name.sym = sym
+                #     self.scope.sym[instr.name.ident] = sym
+                #     self.ctx.val_type[sym] = tp # ha?
+                # case stmt.FunctionDeclStmt():
+                #     self.visit_function(instr)
                 case stmt.ClassDeclStmt():
                     self.visit_class(instr)
                 case stmt.SpriteDeclStmt():
@@ -222,6 +223,8 @@ class Resolver():
         node.name.sym = sym
         self.scope.sym[node.name.ident] = sym
         self.ctx.val_type[sym] = tp
+        if self.sprite_sym:
+            self.ctx.sprites_variable[self.sprite_sym].append(sym)
         return
     
     def visit_function(self, node:stmt.FunctionDeclStmt, function_symbol:symbol.FunctionSymbol | None = None):
@@ -258,8 +261,14 @@ class Resolver():
         if not isinstance(sprite_symbol, symbol.SpriteSymbol):
             self.CallError("Sprite symbol was not collected", node)
             return
+        self.sprite_sym = sprite_symbol
+        self.ctx.sprites_args[self.sprite_sym] = []
+        self.ctx.sprites_func[self.sprite_sym] = []
+        self.ctx.sprites_variable[self.sprite_sym] = []
         self.declare_sprite_types(node)
         for function_symbol, function_node in zip(sprite_symbol.functions, node.functions):
+            self.ctx.sprites_args[self.sprite_sym] += function_symbol.parms
+            self.ctx.sprites_func[self.sprite_sym].append(function_symbol)
             self.visit_function(function_node, function_symbol)
 
     def declare_sprite_types(self, node:stmt.SpriteDeclStmt):
