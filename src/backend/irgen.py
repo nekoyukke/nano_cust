@@ -133,33 +133,40 @@ class IRGenerator:
         return
 
     def make_storage(self, sym: symbol.SpriteSymbol):
-        list_scratch: list[symbol.VariableSymbol|symbol.MemberSymbol|str] = []
-        variable_scratch: list[symbol.VariableSymbol|symbol.MemberSymbol|str] = []
         for i in self.ctx.sprites_variable[sym]:
-            tp = self.ctx.val_type[i]
-            if isinstance(tp, type.ListType):
-                list_scratch.append(i)
-            else:
-                variable_scratch.append(i)
-        for i in self.ctx.types.values():
-            list_scratch += i.member
-            list_scratch += ["__class__address__"]
-        self.make_storage_variable(variable_scratch)
-        self.make_storage_list(list_scratch)
+            self._register_storage_item(i, self.ctx.val_type[i])
 
-    def make_storage_variable(self, element: list[symbol.VariableSymbol|symbol.MemberSymbol|str]):
-        for sym in element:
-            # if member symbol -> sym.cls + sym.val.name
-            # if str -> strで作るだけ作って、登録なしで
-            variable = self.new_variable(sym.name)
-            self.module_variable[sym] = variable
-            self.sprite[self.sprite_pos].variables.append(variable)
+        for cls in self.ctx.types.values():
+            for member in cls.member:
+                self._register_storage_item(member, self.ctx.member_type[member])
+            self._register_storage_item("__class__address__", type.ListType(type.NumberType()))
 
-    def make_storage_list(self, element: list[symbol.VariableSymbol|symbol.MemberSymbol|str]):
-        for sym in element:
-            # if member symbol -> sym.cls + sym.val.name
-            lst = self.new_list(sym.name)
+    def _register_storage_item(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str, tp: object):
+        name = self._storage_name(item)
+        if isinstance(tp, type.ListType):
+            self._create_nested_lists(name, tp)
+            return
+
+        variable = self.new_variable(name)
+        if not isinstance(item, str):
+            self.module_variable[item] = variable
+        self.sprite[self.sprite_pos].variables.append(variable)
+
+    def _create_nested_lists(self, name: str, tp: type.ListType):
+        current_name = name
+        current_tp = tp
+        while isinstance(current_tp, type.ListType):
+            lst = self.new_list(current_name)
             self.sprite[self.sprite_pos].lists.append(lst)
+            current_name = f"{current_name}__inner"
+            current_tp = current_tp.element
+
+    def _storage_name(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str) -> str:
+        if isinstance(item, str):
+            return item
+        if isinstance(item, symbol.MemberSymbol):
+            return f"{item.cls.name}.{item.val.name}"
+        return item.name
 
     def visit_program(self):
 
