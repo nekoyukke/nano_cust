@@ -5,6 +5,8 @@ from src.backend.ir.flow import *
 
 @dataclass
 class Function():
+    name: str
+    params: list[Variable]
     instr: list[Stmt]
 
 

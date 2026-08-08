@@ -13,10 +13,10 @@ class Branch(Stmt):
 
 @dataclass
 class Return(Stmt):
-    pass
+    value: Expr | None = None
 
 
 @dataclass
 class Call(Expr):
-    func: Block
+    func_id: int
     params: list[Expr]

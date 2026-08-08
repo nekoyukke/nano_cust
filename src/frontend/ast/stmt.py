@@ -35,6 +35,11 @@ class ClassDeclStmt(Stmt):
     method: list[FunctionDeclStmt]
     member: list[VariableDeclStmt]
 
+@dataclass(repr=False)
+class SpriteDeclStmt(Stmt):
+    name: _expr.Variable
+    functions: list[FunctionDeclStmt]
+
 # そのほか
 
 @dataclass(repr=False)

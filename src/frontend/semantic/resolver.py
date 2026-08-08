@@ -82,6 +82,9 @@ class Resolver():
                 raise
 
     def resolve(self):
+        for instruction in self.program.instr:
+            if isinstance(instruction, stmt.SpriteDeclStmt):
+                self.declare_sprite_types(instruction)
         self.visit_Program(self.program)
         return self.scope
 
@@ -109,6 +112,8 @@ class Resolver():
                     self.visit_function(instr)
                 case stmt.ClassDeclStmt():
                     self.visit_class(instr)
+                case stmt.SpriteDeclStmt():
+                    self.visit_sprite(instr)
                 case _: # what !?!?!??!
                     continue
 
@@ -122,6 +127,9 @@ class Resolver():
                 return False
             case stmt.ClassDeclStmt():
                 self.visit_class(node) # too.
+                return False
+            case stmt.SpriteDeclStmt():
+                self.visit_sprite(node)
                 return False
             case stmt.Ifstmt():
                 return self.visit_if(node)
@@ -216,11 +224,11 @@ class Resolver():
         self.ctx.val_type[sym] = tp
         return
     
-    def visit_function(self, node:stmt.FunctionDeclStmt):
+    def visit_function(self, node:stmt.FunctionDeclStmt, function_symbol:symbol.FunctionSymbol | None = None):
         # Add a variable symbol
         # function is not good. class to
         # ctx and scope have already been added function symbol and variable symbol
-        sym = self.scope.get_global().sym[node.name.ident] # what doing??
+        sym = function_symbol or self.scope.get_global().sym[node.name.ident] # what doing??
         if not isinstance(sym, symbol.FunctionSymbol):
             return self.CallError("Oops...不明なシンボル[管理者向け]", node)
         self.scope = self.scope.push()# push | new scope
@@ -244,6 +252,25 @@ class Resolver():
         self.scope = self.scope.pop()# pop
         self.ret_tp = None
         return
+
+    def visit_sprite(self, node:stmt.SpriteDeclStmt):
+        sprite_symbol = self.scope.get_global().sym.get(node.name.ident)
+        if not isinstance(sprite_symbol, symbol.SpriteSymbol):
+            self.CallError("Sprite symbol was not collected", node)
+            return
+        self.declare_sprite_types(node)
+        for function_symbol, function_node in zip(sprite_symbol.functions, node.functions):
+            self.visit_function(function_node, function_symbol)
+
+    def declare_sprite_types(self, node:stmt.SpriteDeclStmt):
+        sprite_symbol = self.scope.get_global().sym.get(node.name.ident)
+        if not isinstance(sprite_symbol, symbol.SpriteSymbol):
+            return
+        for function_symbol, function_node in zip(sprite_symbol.functions, node.functions):
+            self.ctx.func_type[function_symbol] = types.Function(
+                self.TypeDef2Type(function_node.result),
+                [self.TypeDef2Type(parameter.type) for parameter in function_node.params]
+            )
 
     def visit_class(self, node:stmt.ClassDeclStmt):
         # no
@@ -403,6 +430,16 @@ class Resolver():
                 return base.element
 
             case expr.MemberExpr():
+                if isinstance(node.expr, expr.Variable):
+                    sprite = self.scope.lookup(node.expr.ident)
+                    if isinstance(sprite, symbol.SpriteSymbol):
+                        node.expr.sym = sprite
+                        for function_symbol in sprite.functions:
+                            if function_symbol.name == node.member.ident:
+                                node.member.sym = function_symbol
+                                return self.ctx.func_type.get(function_symbol)
+                        self.CallError(f"Sprite '{sprite.name}' に関数 '{node.member.ident}' はありません", node)
+                        return None
                 # メンバーアクセス (obj.field)
                 base = self.visit_expr(node.expr)
                 if not base: # eq if base is not none

@@ -29,6 +29,14 @@ class FunctionSymbol(Symbol):
     def __hash__(self):
         return hash((self.name, id(self.parms), id(self.decl)))
 
+@dataclass(repr=False)
+class SpriteSymbol(Symbol):
+    name: str
+    functions: list[FunctionSymbol]
+    decl: Stmt
+    def __hash__(self):
+        return hash((self.name, id(self.functions), id(self.decl)))
+
 @dataclass(repr=False, unsafe_hash=True)
 class MemberSymbol(Symbol):
     val: VariableSymbol

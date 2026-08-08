@@ -43,6 +43,7 @@ class TokenType(Enum):
     IN = r'in\b'
     LET = r'let\b'
     CLASS = r'class\b'
+    SPRITE = r'Sprite\b'
     SAVE = r'save\b'
     UNSAVE = r'unsave\b'
 

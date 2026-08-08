@@ -15,6 +15,7 @@ class Context():
     method_type: dict[MethodSymbol, Function]
     member_type: dict[MemberSymbol, Type]
     args_type: dict[ArgsSymbol, Type]
+    entry: FunctionSymbol | None = None
 
     def __repr__(self) -> str:
         def fmt_sym(s: Symbol) -> str:

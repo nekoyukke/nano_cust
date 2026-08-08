@@ -116,6 +116,12 @@ class Parser():
     def _Program(self) -> _stmt.ProgramStmt:
         stmts: list[_stmt.Stmt] = []
         while not self.is_at_end():
+            if self.check(TokenType.FN):
+                token = self.peek()
+                self.CallError(
+                    "トップレベルにfnは書けません。Sprite内で定義してください",
+                    _base.ASTNode(token.line, token.column, token.len)
+                )
             stmt = self._Stmt_entry()
             if stmt is None:
                 continue
@@ -151,6 +157,8 @@ class Parser():
                 return self.import_node()
             case TokenType.CLASS:
                 return self.class_node()
+            case TokenType.SPRITE:
+                return self.sprite_node()
             case TokenType.SAVE:
                 return self.save_node()
             case TokenType.UNSAVE:
@@ -191,6 +199,24 @@ class Parser():
                     self.CallError("不明な呼び出し",classes)
         self.consume(TokenType.RBRACE, "不明な終わり方")
         return classes
+
+    def sprite_node(self) -> _stmt.SpriteDeclStmt:
+        sprite_token = self.advance()
+        name = self.consume(TokenType.ID, "Sprite name is required")
+        self.consume(TokenType.LBRACE, "Sprite body must start with '{'")
+        functions: list[_stmt.FunctionDeclStmt] = []
+        while not self.check(TokenType.RBRACE):
+            if self.is_at_end():
+                self.CallError("Sprite body is not closed", name)
+            if not self.check(TokenType.FN):
+                self.CallError("Sprite body may only contain function declarations", sprite)
+            functions.append(self.fndefine_node())
+        self.consume(TokenType.RBRACE, "Sprite body must end with '}'")
+        return _stmt.SpriteDeclStmt(
+            sprite_token.line, sprite_token.column, sprite_token.len,
+            _expr.Variable(name.line, name.column, name.len, name.value),
+            functions
+        )
 
     def import_node(self) -> _stmt.ImportNode:
         a = self.advance()

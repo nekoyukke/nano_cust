@@ -74,6 +74,8 @@ class Collector():
                 return self.visit_variable(node)
             case stmt.ClassDeclStmt():
                 return self.visit_class(node)
+            case stmt.SpriteDeclStmt():
+                return self.visit_sprite(node)
             case stmt.FunctionDeclStmt():
                 return self.visit_function(node)
             case _:
@@ -116,9 +118,32 @@ class Collector():
         self.ctx.types[string] = sym
         return sym
 
-    def visit_function(self, node:stmt.FunctionDeclStmt, flag:bool = False) -> symbol.FunctionSymbol:
+    def visit_sprite(self, node:stmt.SpriteDeclStmt) -> symbol.SpriteSymbol:
         string = node.name.ident
         if string in self.scope.sym:
+            self.CallError_Symbol(node, string)
+        sym = symbol.SpriteSymbol(string, [], node)
+        self.scope.sym[string] = sym
+        function_names: set[str] = set()
+        for function in node.functions:
+            if function.name.ident in function_names:
+                self.CallError(f"Sprite内で'{function.name.ident}'はすでに宣言されています", function)
+                continue
+            function_names.add(function.name.ident)
+            function_symbol = self.visit_function(function, True)
+            function.name.sym = function_symbol
+            sym.functions.append(function_symbol)
+        if string == "Main":
+            main_functions = [function for function in sym.functions if function.name == "main"]
+            if not main_functions:
+                self.CallError("Sprite Main には main 関数が必要です", node)
+            else:
+                self.ctx.entry = main_functions[0]
+        return sym
+
+    def visit_function(self, node:stmt.FunctionDeclStmt, flag:bool = False) -> symbol.FunctionSymbol:
+        string = node.name.ident
+        if not flag and string in self.scope.sym:
             self.CallError_Symbol(node, string)
         sym = symbol.FunctionSymbol(string, [symbol.ArgsSymbol(j.name, node, i) for i,j in enumerate(node.params)], node)
         if flag:

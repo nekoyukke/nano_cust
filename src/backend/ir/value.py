@@ -20,4 +20,4 @@ class String(Immediate):
 
 @dataclass
 class Number(Immediate):
-    value: int
+    value: int | float
