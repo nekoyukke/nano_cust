@@ -28,7 +28,14 @@ class IRGenerator:
         # symbolの変換
         self.module_variable: dict[symbol.Symbol, Variable] = {}
         self.module_function: dict[symbol.FunctionSymbol, int] = {}
+        # sprite整理
+        self.sprite: list[Sprite] = []
+        # spriteの今のindex
+        self.sprite_pos:int = 0
+        self._sprite_reset()
 
+    def _sprite_reset(self):
+        # sprict 共通ではないっす
         # counts
         self.count = 0
         self.temp_pos = 0
@@ -39,17 +46,9 @@ class IRGenerator:
         self.alloc_stack: ListInfo
         self.scope_stack: ListInfo
         self.Frame: ListInfo
-        # sprict 共通ではないっす
         self.temps: list[Variable] = []
-        # sprite整理
-        self.sprite: list[Sprite] = []
-        # spriteの今のindex
-        self.sprite_pos:int = 0
-
-    def get_name(self) -> str: 
-        """名前取得 TODO"""
-        # eazy <= no!!!
-        return "__global__"
+        self.sprite_variable: list[Variable] = []
+        self.sprite_list: list[ListInfo] = []
 
     def new_variable(self, name:str, es:bool = False) -> Variable:
         """変数追加"""
@@ -65,7 +64,7 @@ class IRGenerator:
         if es:
             # nc is nano-cust
             return ListInfo("__nc_runtime__."+name)
-        return ListInfo(self.get_name()+name)
+        return ListInfo(name)
 
     def reset_temp(self):
         """tempをリセット（stmt毎を想定）"""
@@ -83,7 +82,7 @@ class IRGenerator:
         return temp
 
     def visit(self) -> Module:
-        "その名の通り。"
+        "その名の通り。エントリーポイント"
         # what
         for i in self.program.instr:
             if isinstance(i, stmt.SpriteDeclStmt):
@@ -92,9 +91,26 @@ class IRGenerator:
 
     def visit_sprite(self, node:stmt.SpriteDeclStmt):
         """sprite作る"""
-        node.name
+        # sprict 共通ではないっす
+        self._sprite_reset()
         sym = self.ctx.sprite[node.name.ident]
-        self.make_sprite(sym)        
+        self.make_sprite(sym)
+        funcs:list[Function] = []
+        for i in self.program.instr:
+            if isinstance(i, stmt.ClassDeclStmt):
+                self.visit_class(i)
+        for i in node.functions:
+            if not isinstance(i.name.sym, symbol.FunctionSymbol):
+                continue
+            symbols = i.name.sym
+            self.module_function[symbols] = -1
+        for i in node.functions:
+            funcs.append(self.visit_function(i))
+        return Sprite(
+            funcs,
+            self.sprite_list,
+            self.sprite_variable
+        )
 
     def make_sprite(self, sym: symbol.SpriteSymbol):
         """sprite用の環境を作っちゃう"""
@@ -133,15 +149,18 @@ class IRGenerator:
         return
 
     def make_storage(self, sym: symbol.SpriteSymbol):
+        """ストレージ生成"""
+        # 特に変数
         for i in self.ctx.sprites_variable[sym]:
             self._register_storage_item(i, self.ctx.val_type[i])
-
+        # 特にclass
         for cls in self.ctx.types.values():
             for member in cls.member:
                 self._register_storage_item(member, self.ctx.member_type[member])
             self._register_storage_item("__class__address__", type.ListType(type.NumberType()))
 
     def _register_storage_item(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str, tp: object):
+        """ストレージアイテムを保存"""
         name = self._storage_name(item)
         if isinstance(tp, type.ListType):
             self._create_nested_lists(name, tp)
@@ -153,6 +172,7 @@ class IRGenerator:
         self.sprite[self.sprite_pos].variables.append(variable)
 
     def _create_nested_lists(self, name: str, tp: type.ListType):
+        """リスト生成が必須なら作る"""
         current_name = name
         current_tp = tp
         while isinstance(current_tp, type.ListType):
@@ -161,14 +181,46 @@ class IRGenerator:
             current_name = f"{current_name}__inner"
             current_tp = current_tp.element
 
-    def _storage_name(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str) -> str:
+    def _storage_name(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str | symbol.MethodSymbol | symbol.ArgsSymbol) -> str:
+        """ストレージ名を生成"""
         if isinstance(item, str):
-            return item
+            return "__nc__runtime__"+item+f"{id(item):x}"[-4:]
+        # なんで過去の私memberとmethodのメンバ統一しない？？？？？？
         if isinstance(item, symbol.MemberSymbol):
-            return f"{item.cls.name}.{item.val.name}"
-        return item.name
+            return f"{item.cls.name}.{item.val.name}"+f"{id(item):x}"[-4:]
+        if isinstance(item, symbol.MethodSymbol):
+            return f"{item.cls.name}.{item.fnc.name}"+f"{id(item):x}"[-4:]
+        if isinstance(item, symbol.ArgsSymbol):
+            return f"{item.name}in{item.idx}"+f"{id(item):x}"[-4:]
+        return item.name+f"{id(item):x}"[-4:]
 
-    def visit_program(self):
+    def visit_function(self, node:stmt.FunctionDeclStmt):
+        if not isinstance(node.name.sym, symbol.FunctionSymbol):
+            raise
+        sym = node.name.sym
+        args:list[Variable] = []
+        for p in sym.parms:
+            name = self._storage_name(p)
+            val = self.new_variable(name)
+            self.module_variable[p] = val
+            self.sprite[self.sprite_pos].variables.append(val)
+            args.append(val) # おいしい
+        # for i in # なにこれ
+        body = self.visit_stmt_entry(node.body) # visitisicisit
+        return Function(
+            node.name.ident,
+            args,
+            body
+        )
+
+    def visit_class(self, node:stmt.ClassDeclStmt):
+        raise
+
+    def visit_stmt_entry(self, node:stmt.Stmt) -> Block:
+        body = self.visit_stmt(node)
+        if isinstance(body, Block):
+            return body
+        return Block([body])
 
     def visit_stmt(self, node:stmt.Stmt) -> Stmt:
         # what the fuck!?

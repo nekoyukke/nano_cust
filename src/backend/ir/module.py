@@ -7,7 +7,7 @@ from src.backend.ir.flow import *
 class Function():
     name: str
     params: list[Variable]
-    instr: list[Stmt]
+    instr: Block
 
 
 @dataclass
