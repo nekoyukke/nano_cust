@@ -19,6 +19,7 @@ class Context():
     sprites_variable: dict[SpriteSymbol, list[VariableSymbol]]
     sprites_func: dict[SpriteSymbol, list[FunctionSymbol]]
     sprites_args: dict[SpriteSymbol, list[ArgsSymbol]]
+    entry: FunctionSymbol | None = None
 
     def __repr__(self) -> str:
         def fmt_sym(s: Symbol) -> str:

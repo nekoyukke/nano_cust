@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+_type = type
+
 import src.frontend.ast.expr as expr
 import src.frontend.ast.stmt as stmt
 
@@ -98,7 +100,7 @@ class IRGenerator:
         funcs:list[Function] = []
         for i in self.program.instr:
             if isinstance(i, stmt.ClassDeclStmt):
-                self.visit_class(i)
+                funcs += self.visit_class(i)
         for i in node.functions:
             if not isinstance(i.name.sym, symbol.FunctionSymbol):
                 continue
@@ -106,11 +108,11 @@ class IRGenerator:
             self.module_function[symbols] = -1
         for i in node.functions:
             funcs.append(self.visit_function(i))
-        return Sprite(
+        self.module.sprites.append(Sprite(
             funcs,
             self.sprite_list,
             self.sprite_variable
-        )
+        ))
 
     def make_sprite(self, sym: symbol.SpriteSymbol):
         """sprite用の環境を作っちゃう"""
@@ -178,26 +180,30 @@ class IRGenerator:
         while isinstance(current_tp, type.ListType):
             lst = self.new_list(current_name)
             self.sprite[self.sprite_pos].lists.append(lst)
-            current_name = f"{current_name}__inner"
+            current_name = f".{current_name}.__inner__"
             current_tp = current_tp.element
 
     def _storage_name(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str | symbol.MethodSymbol | symbol.ArgsSymbol) -> str:
         """ストレージ名を生成"""
         if isinstance(item, str):
-            return "__nc__runtime__"+item+f"{id(item):x}"[-4:]
+            return "__nc_runtime__"+item+f"{id(item):x}"[-4:]
         # なんで過去の私memberとmethodのメンバ統一しない？？？？？？
         if isinstance(item, symbol.MemberSymbol):
-            return f"{item.cls.name}.{item.val.name}"+f"{id(item):x}"[-4:]
+            return f"{item.cls.name}.__member__.{item.val.name}"+f"{id(item):x}"[-4:]
         if isinstance(item, symbol.MethodSymbol):
-            return f"{item.cls.name}.{item.fnc.name}"+f"{id(item):x}"[-4:]
+            return f"{item.cls.name}.__method__.{item.fnc.name}"+f"{id(item):x}"[-4:]
         if isinstance(item, symbol.ArgsSymbol):
-            return f"{item.name}in{item.idx}"+f"{id(item):x}"[-4:]
+            return f"{item.name}.__at__.{item.idx}"+f"{id(item):x}"[-4:]
         return item.name+f"{id(item):x}"[-4:]
 
-    def visit_function(self, node:stmt.FunctionDeclStmt):
-        if not isinstance(node.name.sym, symbol.FunctionSymbol):
-            raise
-        sym = node.name.sym
+    def visit_function(self, node:stmt.FunctionDeclStmt, inner_name:str | None = None):
+        """関数を回す。inner_nameは名前を追加"""
+        if not isinstance(node.name.sym, symbol.FunctionSymbol | symbol.MethodSymbol):
+            raise RuntimeError(node.name.sym)
+        elif isinstance(node.name.sym, symbol.MethodSymbol):
+            sym = node.name.sym.fnc
+        else:
+            sym = node.name.sym
         args:list[Variable] = []
         for p in sym.parms:
             name = self._storage_name(p)
@@ -207,6 +213,9 @@ class IRGenerator:
             args.append(val) # おいしい
         # for i in # なにこれ
         body = self.visit_stmt_entry(node.body) # visitisicisit
+        name = node.name.ident
+        if inner_name:
+            name += inner_name
         return Function(
             node.name.ident,
             args,
@@ -214,31 +223,72 @@ class IRGenerator:
         )
 
     def visit_class(self, node:stmt.ClassDeclStmt):
-        raise
+        """クラスの生成、ただ、forを回しているだけ"""
+        funcs :list[Function] = []
+        for i in node.method:
+            funcs += [self.visit_function(i)]
+        return funcs
 
     def visit_stmt_entry(self, node:stmt.Stmt) -> Block:
+        """Blockを返す、entry関数"""
+        if isinstance(node, stmt.BlockStmt):
+            return Block([
+                self.visit_stmt(i) for i in node.instr
+            ])
         body = self.visit_stmt(node)
         if isinstance(body, Block):
             return body
         return Block([body])
 
+    def get_type(self, sym:symbol.Symbol) -> type.Type:
+        match (sym):
+            case symbol.ArgsSymbol():
+                return self.ctx.args_type[sym]
+            case symbol.VariableSymbol():
+                return self.ctx.val_type[sym]
+            case symbol.FunctionSymbol():
+                return self.ctx.func_type[sym]
+            case symbol.MemberSymbol():
+                return self.ctx.member_type[sym]
+            case symbol.MethodSymbol():
+                return self.ctx.method_type[sym]
+            case _:
+                raise
+
+    def get_default_data(self, sym:symbol.Symbol):
+        match (sym):
+            case symbol.ArgsSymbol():
+                return self.ctx.args_type[sym]
+            case symbol.VariableSymbol():
+                return self.ctx.val_type[sym]
+            case symbol.FunctionSymbol():
+                return self.ctx.func_type[sym]
+            case symbol.MemberSymbol():
+                return self.ctx.member_type[sym]
+            case symbol.MethodSymbol():
+                return self.ctx.method_type[sym]
+            case _:
+                raise
+
     def visit_stmt(self, node:stmt.Stmt) -> Stmt:
+        """Stmtを返すvisiter"""
         # what the fuck!?
         match(node):
             # 宣言系
             case stmt.VariableDeclStmt():
-                pass
+                sym = node.name.sym
+                if not sym:
+                    raise
+                variable = self.module_variable[sym]
+                # symbolをもとにげっちゅする
+                if node.left:
+                    return Move(variable, self.visit_expr(node.left))
 
             # 式・返値系
             case stmt.ExprStmt():
-                pass
-            case stmt.ReturnStmt():
-                pass
+                return Move(self.trash, self.visit_expr(node.expr)) # ごみに捨てる。
 
-            # ブロック系
-            case stmt.BlockStmt():
-                pass
-            case stmt.ProgramStmt():
+            case stmt.ReturnStmt():
                 pass
 
             # 制御構文系
@@ -250,8 +300,6 @@ class IRGenerator:
                 pass
 
             # 外部操作・保存系
-            case stmt.ImportNode():
-                pass
             case stmt.SaveNode():
                 pass
             case stmt.UnSaveNode():
@@ -259,9 +307,10 @@ class IRGenerator:
 
             # 漏れ防止
             case _:
-                raise ValueError(f"Unknown statement node: {type(stmt).__name__}")
+                raise ValueError(f"Unknown statement node: {_type(node).__name__}")
 
     def visit_expr(self, node:expr.Expr) -> Expr:
+        """exprを返す関数。"""
         match node:
             # 二項演算・単項演算・論理・代入
             case expr.BinaryExpr():
@@ -301,4 +350,4 @@ class IRGenerator:
             
             # 漏れ防止
             case _:
-                raise ValueError(f"Unknown expression node: {type(expr).__name__}")
+                raise ValueError(f"Unknown expression node: {_type(node).__name__}")
