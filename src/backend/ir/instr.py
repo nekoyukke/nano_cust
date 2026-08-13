@@ -59,7 +59,7 @@ class Stmt(ABC):
             return "None"
         
         # ASTNode（再帰）
-        if isinstance(value, Stmt):
+        if isinstance(value, instr):
             return value._format_repr(indent=indent)
         
         # Enum
@@ -73,7 +73,7 @@ class Stmt(ABC):
             nvalue: list[Any] = cast(list[Any], value)
             # 要素が複数またはASTNodeを含む場合は改行
             formatted_items: list[str] = [self._format_value(item, indent + 1) for item in nvalue]
-            if len(nvalue) > 2 or any(isinstance(v, Stmt) for v in nvalue):
+            if len(nvalue) > 2 or any(isinstance(v, instr) for v in nvalue):
                 items_str = f",\n{next_indent_str}".join(formatted_items)
                 return f"[\n{next_indent_str}{items_str}\n{indent_str}]"
             else:
@@ -136,7 +136,7 @@ class Expr(ABC):
             return "None"
         
         # ASTNode（再帰）
-        if isinstance(value, Expr):
+        if isinstance(value, instr):
             return value._format_repr(indent=indent)
         
         # Enum
@@ -150,7 +150,7 @@ class Expr(ABC):
             nvalue: list[Any] = cast(list[Any], value)
             # 要素が複数またはASTNodeを含む場合は改行
             formatted_items: list[str] = [self._format_value(item, indent + 1) for item in nvalue]
-            if len(nvalue) > 2 or any(isinstance(v, Expr) for v in nvalue):
+            if len(nvalue) > 2 or any(isinstance(v, instr) for v in nvalue):
                 items_str = f",\n{next_indent_str}".join(formatted_items)
                 return f"[\n{next_indent_str}{items_str}\n{indent_str}]"
             else:
@@ -213,7 +213,7 @@ class BoolExpr(Expr):
             return "None"
         
         # ASTNode（再帰）
-        if isinstance(value, BoolExpr):
+        if isinstance(value, instr):
             return value._format_repr(indent=indent)
         
         # Enum
@@ -227,7 +227,7 @@ class BoolExpr(Expr):
             nvalue: list[Any] = cast(list[Any], value)
             # 要素が複数またはASTNodeを含む場合は改行
             formatted_items: list[str] = [self._format_value(item, indent + 1) for item in nvalue]
-            if len(nvalue) > 2 or any(isinstance(v, BoolExpr) for v in nvalue):
+            if len(nvalue) > 2 or any(isinstance(v, instr) for v in nvalue):
                 items_str = f",\n{next_indent_str}".join(formatted_items)
                 return f"[\n{next_indent_str}{items_str}\n{indent_str}]"
             else:
@@ -239,3 +239,5 @@ class BoolExpr(Expr):
         
         # 数値、真偽値など
         return repr(value)
+
+instr = BoolExpr | Expr | Stmt
