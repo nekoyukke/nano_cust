@@ -12,7 +12,7 @@ from src.backend.ir.value import *
 
 @dataclass
 class Stmt(ABC):
-    def _format_repr(self, indent: int = 0) -> str:
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -60,7 +60,7 @@ class Stmt(ABC):
         
         # ASTNode（再帰）
         if isinstance(value, instr):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):
@@ -89,7 +89,7 @@ class Stmt(ABC):
 
 @dataclass
 class Expr(ABC):
-    def _format_repr(self, indent: int = 0) -> str:
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -137,7 +137,7 @@ class Expr(ABC):
         
         # ASTNode（再帰）
         if isinstance(value, instr):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):
@@ -166,7 +166,7 @@ class Expr(ABC):
 
 @dataclass
 class BoolExpr(Expr):
-    def _format_repr(self, indent: int = 0) -> str:
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -214,7 +214,7 @@ class BoolExpr(Expr):
         
         # ASTNode（再帰）
         if isinstance(value, instr):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):

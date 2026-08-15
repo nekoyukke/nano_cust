@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass, field
 
 _type = type
 
@@ -19,6 +20,11 @@ from src.backend.ir.stmt import *
 from src.backend.ir.value import *
 
 
+@dataclass
+class Expr_Result():
+    exp:Expr
+    stmt: list[Stmt] = field(default_factory=list[Stmt])
+
 class IRGenerator:
     def __init__(self, Program:stmt.ProgramStmt, source:str, ctx:Context) -> None:
         self.module = Module([], None)
@@ -28,7 +34,6 @@ class IRGenerator:
         # fuckint meens "fuck int" and "fuckin t"
         
         # symbolの変換
-        self.module_variable: dict[symbol.Symbol, Variable] = {}
         self.module_function: dict[symbol.FunctionSymbol, int] = {}
         # sprite整理
         self.sprite: list[Sprite] = []
@@ -49,8 +54,8 @@ class IRGenerator:
         self.scope_stack: ListInfo
         self.Frame: ListInfo
         self.temps: list[Variable] = []
-        self.sprite_variable: list[Variable] = []
-        self.sprite_list: list[ListInfo] = []
+        self.sprite_variable: dict[symbol.Symbol, Variable] = {}
+        self.sprite_list: dict[symbol.Symbol, ListInfo] = {}
 
     def new_variable(self, name:str, es:bool = False) -> Variable:
         """変数追加"""
@@ -60,13 +65,13 @@ class IRGenerator:
             return Variable(self.count, self.sprite_pos, "__nc_runtime__."+name)
         return Variable(self.count, self.sprite_pos, name)
 
-    def new_list(self, name:str, es:bool = False) -> ListInfo:
+    def new_list(self, name:str, nested:None|ListInfo, es:bool = False) -> ListInfo:
         """新しいリスト"""
         self.count+=1
         if es:
             # nc is nano-cust
-            return ListInfo("__nc_runtime__."+name)
-        return ListInfo(name)
+            return ListInfo("__nc_runtime__."+name, nested)
+        return ListInfo(name, nested)
 
     def reset_temp(self):
         """tempをリセット（stmt毎を想定）"""
@@ -110,8 +115,8 @@ class IRGenerator:
             funcs.append(self.visit_function(i))
         self.module.sprites.append(Sprite(
             funcs,
-            self.sprite_list,
-            self.sprite_variable
+            list(self.sprite_list.values()),
+            list(self.sprite_variable.values())
         ))
 
     def make_sprite(self, sym: symbol.SpriteSymbol):
@@ -138,11 +143,11 @@ class IRGenerator:
 
     def make_runtime_list(self):
         """オブジェクト関連"""
-        self.object_address: ListInfo = self.new_list("__Object_address__", True)
-        self.object_clstype: ListInfo = self.new_list("__Object_CLSType", True)
-        self.alloc_stack: ListInfo = self.new_list("__Aloc_Stack__", True)
-        self.scope_stack: ListInfo = self.new_list("__Scope_Stack__", True)
-        self.Frame: ListInfo = self.new_list("__Frame__", True)
+        self.object_address: ListInfo = self.new_list("__Object_address__", None, True)
+        self.object_clstype: ListInfo = self.new_list("__Object_CLSType", None, True)
+        self.alloc_stack: ListInfo = self.new_list("__Aloc_Stack__", None, True)
+        self.scope_stack: ListInfo = self.new_list("__Scope_Stack__", None, True)
+        self.Frame: ListInfo = self.new_list("__Frame__", None, True)
         self.sprite[self.sprite_pos].lists.append(self.object_address)
         self.sprite[self.sprite_pos].lists.append(self.object_clstype)
         self.sprite[self.sprite_pos].lists.append(self.alloc_stack)
@@ -154,33 +159,39 @@ class IRGenerator:
         """ストレージ生成"""
         # 特に変数
         for i in self.ctx.sprites_variable[sym]:
-            self._register_storage_item(i, self.ctx.val_type[i])
+            self._register_storage_item(i, self.ctx.val_type[i], sym)
         # 特にclass
         for cls in self.ctx.types.values():
             for member in cls.member:
-                self._register_storage_item(member, self.ctx.member_type[member])
-            self._register_storage_item("__class__address__", type.ListType(type.NumberType()))
+                self._register_storage_item(member, self.ctx.member_type[member],sym)
+            self._register_storage_item("__class__address__", type.ListType(type.NumberType()), sym)
 
-    def _register_storage_item(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str, tp: object):
+    def _register_storage_item(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str, tp: type.Type, sym:symbol.Symbol):
         """ストレージアイテムを保存"""
         name = self._storage_name(item)
         if isinstance(tp, type.ListType):
-            self._create_nested_lists(name, tp)
+            self._create_nested_lists(name, tp, sym)
             return
 
         variable = self.new_variable(name)
         if not isinstance(item, str):
-            self.module_variable[item] = variable
+            self.sprite_variable[item] = variable
         self.sprite[self.sprite_pos].variables.append(variable)
 
-    def _create_nested_lists(self, name: str, tp: type.ListType):
+    def _create_nested_lists(self, name: str, tp: type.ListType, sym:symbol.Symbol):
         """リスト生成が必須なら作る"""
-        current_name = name
-        current_tp = tp
+        # first
+        current_list: ListInfo = self.new_list(name, None)
+        self.sprite[self.sprite_pos].lists.append(current_list)
+        self.sprite_list[sym] = current_list
+        current_name = f"{name}.__inner__"
+        current_tp = tp.element
+        # next
         while isinstance(current_tp, type.ListType):
-            lst = self.new_list(current_name)
+            lst = self.new_list(current_name, current_list)
+            current_list = lst
             self.sprite[self.sprite_pos].lists.append(lst)
-            current_name = f".{current_name}.__inner__"
+            current_name = f"{current_name}.__inner__"
             current_tp = current_tp.element
 
     def _storage_name(self, item: symbol.VariableSymbol | symbol.MemberSymbol | str | symbol.MethodSymbol | symbol.ArgsSymbol) -> str:
@@ -208,7 +219,7 @@ class IRGenerator:
         for p in sym.parms:
             name = self._storage_name(p)
             val = self.new_variable(name)
-            self.module_variable[p] = val
+            self.sprite_variable[p] = val
             self.sprite[self.sprite_pos].variables.append(val)
             args.append(val) # おいしい
         # for i in # なにこれ
@@ -232,13 +243,13 @@ class IRGenerator:
     def visit_stmt_entry(self, node:stmt.Stmt) -> Block:
         """Blockを返す、entry関数"""
         if isinstance(node, stmt.BlockStmt):
-            return Block([
-                self.visit_stmt(i) for i in node.instr
-            ])
+            return Block(
+                *[self.visit_stmt(i) for i in node.instr]
+            )
         body = self.visit_stmt(node)
         if isinstance(body, Block):
             return body
-        return Block([body])
+        return Block(body)
 
     def get_type(self, sym:symbol.Symbol) -> type.Type:
         match (sym):
@@ -255,22 +266,22 @@ class IRGenerator:
             case _:
                 raise
 
-    def get_default_data(self, sym:symbol.Symbol):
-        match (sym):
-            case symbol.ArgsSymbol():
-                return self.ctx.args_type[sym]
-            case symbol.VariableSymbol():
-                return self.ctx.val_type[sym]
-            case symbol.FunctionSymbol():
-                return self.ctx.func_type[sym]
-            case symbol.MemberSymbol():
-                return self.ctx.member_type[sym]
-            case symbol.MethodSymbol():
-                return self.ctx.method_type[sym]
+    def get_default_value(self, sym:symbol.Symbol) -> ImmExpr | None:
+        tp = self.get_type(sym)
+        if not isinstance(tp, type.BuildinType):
+            return None
+        match(tp):
             case _:
-                raise
+                pass
+        
+    def get_val_list(self, sym:symbol.Symbol):
+        if sym in self.sprite_variable:
+            return self.sprite_variable[sym]
+        if sym in self.sprite_list:
+            return self.sprite_list[sym]
+        raise
 
-    def visit_stmt(self, node:stmt.Stmt) -> Stmt:
+    def visit_stmt(self, node:stmt.Stmt) -> list[Stmt]:
         """Stmtを返すvisiter"""
         # what the fuck!?
         match(node):
@@ -279,14 +290,23 @@ class IRGenerator:
                 sym = node.name.sym
                 if not sym:
                     raise
-                variable = self.module_variable[sym]
+                variable = self.get_val_list(sym)
                 # symbolをもとにげっちゅする
-                if node.left:
-                    return Move(variable, self.visit_expr(node.left))
+                if isinstance(variable, ListInfo):
+                    return [ListReset(variable)] # 消去
+                else:
+                    if node.left:
+                        left = self.visit_expr(node.left)
+                        # val
+                        return [*left.stmt, Move(variable, left.exp)]
+                    # 何もしなくていいよん
+                    # デフォ値
+                    return [Move(variable, self.get_default_data())]
 
             # 式・返値系
             case stmt.ExprStmt():
-                return Move(self.trash, self.visit_expr(node.expr)) # ごみに捨てる。
+                left = self.visit_expr(node.expr)
+                return [*left.stmt, Move(self.trash, left.exp)] # ごみに捨てる。
 
             case stmt.ReturnStmt():
                 pass
@@ -309,7 +329,7 @@ class IRGenerator:
             case _:
                 raise ValueError(f"Unknown statement node: {_type(node).__name__}")
 
-    def visit_expr(self, node:expr.Expr) -> Expr:
+    def visit_expr(self, node:expr.Expr) -> Expr_Result:
         """exprを返す関数。"""
         match node:
             # 二項演算・単項演算・論理・代入
@@ -320,7 +340,7 @@ class IRGenerator:
             case expr.LogicExpr():
                 pass
             case expr.AssignExpr():
-                pass
+                return self.visit_assign_expr(node)
             
             # 変数・呼び出し
             case expr.Variable():
@@ -336,18 +356,56 @@ class IRGenerator:
             
             # リテラル系 (Literal)
             case expr.BoolLiteral():
-                return ImmExpr(Number(1 if node.is_true else 0))
+                return Expr_Result(ImmExpr(Number(1 if node.is_true else 0)))
             case expr.IntLiteral():
-                return ImmExpr(Number(node.number))
+                return Expr_Result(ImmExpr(Number(node.number)))
             case expr.FloatLiteral():
-                return ImmExpr(Number(node.number))
+                return Expr_Result(ImmExpr(Number(node.number)))
             case expr.NoneLiteral():
                 pass
             case expr.NullLiteral():
                 pass
             case expr.StringLiteral():
-                return ImmExpr(String(node.string))
+                return Expr_Result(ImmExpr(String(node.string)))
+
+            case expr.NewExpr():
+                pass
             
             # 漏れ防止
             case _:
                 raise ValueError(f"Unknown expression node: {_type(node).__name__}")
+
+    def visit_assign_expr(self, node:expr.AssignExpr) -> Expr_Result:
+        self.get_nest_L_value(node.right)
+        match (node.op):
+            case expr.AssignKind.ASSIGN:
+                node.right # は？死ねや
+                return Expr_Result(
+                    node.left,
+                )
+            case expr.AssignKind.PULS:
+                pass
+            case expr.AssignKind.MINUS:
+                pass
+            case expr.AssignKind.MULT:
+                pass
+            case expr.AssignKind.DIV:
+                pass
+            case _:
+                raise
+
+    def get_nest_L_value(self, node:expr.Expr):
+        match(node):
+            case expr.MemberExpr():
+                if not node.member.sym:
+                    raise
+                val = self.varis    [node.member.sym]
+                self.get_nest_L_value(node.expr)
+            case expr.IndexExpr():
+                pass
+            case expr.Variable():
+                pass
+            case expr.CallExpr():
+                pass
+            case _:
+                raise # 知るか！？

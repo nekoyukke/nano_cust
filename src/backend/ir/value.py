@@ -22,3 +22,8 @@ class String(Immediate):
 @dataclass
 class Number(Immediate):
     value: int | float
+
+@dataclass
+class ListInfo():
+    list_name : str
+    nested: ListInfo|None = None # ネスト先

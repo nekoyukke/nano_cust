@@ -42,14 +42,18 @@ class Vector3 {
     }
 }
 sprite Main {
-    fn main() -> int { return Hero.jump(10); }
+    fn main() -> int {
+        let v:Vector3 = new Vector3;
+        v.y = v.x = 1;
+        return Hero.jump(10);
+    }
 }
 sprite Hero {
     fn jump(height: int) -> int { return height; }
 }
 """
 
-(ast:=parse(string))
+print(ast:=parse(string))
 print("collected")
 print(*(cc:=collect(ast,string)), sep="\n"*3)
 print("\n"*3)

@@ -9,8 +9,8 @@ class Function():
     params: list[Variable]
     instr: Block
     def __repr__(self) -> str:
-        return self._format_repr()
-    def _format_repr(self, indent: int = 0) -> str:
+        return self.format_repr()
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -58,7 +58,7 @@ class Function():
         
         # ASTNode（再帰）
         if isinstance(value, module):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):
@@ -86,17 +86,13 @@ class Function():
 
 
 @dataclass
-class ListInfo():
-    list_name : str
-
-@dataclass
 class Sprite():
     func: list[Function]
     lists: list[ListInfo]
     variables: list[Variable]
     def __repr__(self) -> str:
-        return self._format_repr()
-    def _format_repr(self, indent: int = 0) -> str:
+        return self.format_repr()
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -144,7 +140,7 @@ class Sprite():
         
         # ASTNode（再帰）
         if isinstance(value, module):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):
@@ -176,8 +172,8 @@ class Module():
     entry_point : Function | None = None
 
     def __repr__(self) -> str:
-        return self._format_repr()
-    def _format_repr(self, indent: int = 0) -> str:
+        return self.format_repr()
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -225,7 +221,7 @@ class Module():
         
         # ASTNode（再帰）
         if isinstance(value, module):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):

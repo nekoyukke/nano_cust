@@ -8,7 +8,7 @@ from src.backend.ir.instr import *
 @dataclass
 class Block:
     instr: list[Stmt]
-    def _format_repr(self, indent: int = 0) -> str:
+    def format_repr(self, indent: int = 0) -> str:
         """再帰的に整形されたAST表現を生成する"""
         indent_str = "  " * indent
         next_indent_str = "  " * (indent + 1)
@@ -56,7 +56,7 @@ class Block:
         
         # ASTNode（再帰）
         if isinstance(value, instr):
-            return value._format_repr(indent=indent)
+            return value.format_repr(indent=indent)
         
         # Enum
         if isinstance(value, Enum):
