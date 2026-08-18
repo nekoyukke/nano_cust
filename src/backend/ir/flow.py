@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from enum import Enum
 from src.backend.ir.instr import *
+
+if TYPE_CHECKING:
+    from src.backend.ir.module import Function
 
 @dataclass
 class Block:
@@ -95,5 +98,5 @@ class Return(Stmt):
 
 @dataclass
 class Call(Expr):
-    func_id: int
+    callee: Function
     params: list[Expr]

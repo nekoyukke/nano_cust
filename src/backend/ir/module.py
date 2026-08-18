@@ -3,7 +3,7 @@ from src.backend.ir.instr import *
 
 from src.backend.ir.flow import *
 
-@dataclass
+@dataclass(eq=False)
 class Function():
     name: str
     params: list[Variable]

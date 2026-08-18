@@ -34,7 +34,7 @@ class IRGenerator:
         # fuckint meens "fuck int" and "fuckin t"
         
         # symbolの変換
-        self.module_function: dict[symbol.FunctionSymbol, int] = {}
+        self.module_function: dict[symbol.FunctionSymbol, Function] = {}
         # sprite整理
         self.sprite: list[Sprite] = []
         # spriteの今のindex
@@ -102,17 +102,17 @@ class IRGenerator:
         self._sprite_reset()
         sym = self.ctx.sprite[node.name.ident]
         self.make_sprite(sym)
-        funcs:list[Function] = []
+        function_nodes: list[stmt.FunctionDeclStmt] = []
         for i in self.program.instr:
             if isinstance(i, stmt.ClassDeclStmt):
-                funcs += self.visit_class(i)
-        for i in node.functions:
-            if not isinstance(i.name.sym, symbol.FunctionSymbol):
-                continue
-            symbols = i.name.sym
-            self.module_function[symbols] = -1
-        for i in node.functions:
-            funcs.append(self.visit_function(i))
+                function_nodes.extend(i.method)
+        function_nodes.extend(node.functions)
+
+        # 関数本体を生成する前に、すべての関数オブジェクトを登録する。
+        # これにより再帰・前方参照を直接Function参照として表現できる。
+        funcs = [self.declare_function(i) for i in function_nodes]
+        for function, function_node in zip(funcs, function_nodes):
+            function.instr = self.visit_stmt_entry(function_node.body)
         self.module.sprites.append(Sprite(
             funcs,
             list(self.sprite_list.values()),
@@ -207,8 +207,8 @@ class IRGenerator:
             return f"{item.name}.__at__.{item.idx}"+f"{id(item):x}"[-4:]
         return item.name+f"{id(item):x}"[-4:]
 
-    def visit_function(self, node:stmt.FunctionDeclStmt, inner_name:str | None = None):
-        """関数を回す。inner_nameは名前を追加"""
+    def declare_function(self, node:stmt.FunctionDeclStmt, inner_name:str | None = None) -> Function:
+        """関数の空IRを生成して登録する。本文は後で生成する。"""
         if not isinstance(node.name.sym, symbol.FunctionSymbol | symbol.MethodSymbol):
             raise RuntimeError(node.name.sym)
         elif isinstance(node.name.sym, symbol.MethodSymbol):
@@ -222,16 +222,18 @@ class IRGenerator:
             self.sprite_variable[p] = val
             self.sprite[self.sprite_pos].variables.append(val)
             args.append(val) # おいしい
-        # for i in # なにこれ
-        body = self.visit_stmt_entry(node.body) # visitisicisit
         name = node.name.ident
         if inner_name:
             name += inner_name
-        return Function(
-            node.name.ident,
-            args,
-            body
-        )
+        function = Function(name, args, Block([]))
+        self.module_function[sym] = function
+        return function
+
+    def visit_function(self, node:stmt.FunctionDeclStmt, inner_name:str | None = None) -> Function:
+        """互換用の単発生成。相互参照がある場合はdeclare_functionを先に使う。"""
+        function = self.declare_function(node, inner_name)
+        function.instr = self.visit_stmt_entry(node.body)
+        return function
 
     def visit_class(self, node:stmt.ClassDeclStmt):
         """クラスの生成、ただ、forを回しているだけ"""
@@ -243,9 +245,11 @@ class IRGenerator:
     def visit_stmt_entry(self, node:stmt.Stmt) -> Block:
         """Blockを返す、entry関数"""
         if isinstance(node, stmt.BlockStmt):
-            return Block(
-                *[self.visit_stmt(i) for i in node.instr]
-            )
+            return Block([
+                ir_stmt
+                for ast_stmt in node.instr
+                for ir_stmt in self.visit_stmt(ast_stmt)
+            ])
         body = self.visit_stmt(node)
         if isinstance(body, Block):
             return body
@@ -281,6 +285,21 @@ class IRGenerator:
             return self.sprite_list[sym]
         raise
 
+    def default_value(self, tp: type.Type) -> Expr | None:
+        match tp:
+            case type.NumberType():
+                return ImmExpr(Number(0))
+            case type.StringType():
+                return ImmExpr(String(""))
+            case type.BooleanType():
+                return ImmExpr(Number(0))  # Scratchではfalse
+            case type.UserDefType():
+                return ImmExpr(Number(0))  # オブジェクトアドレス0をnull予約
+            case type.ListType():
+                return None               # ListResetを出す
+            case _:
+                raise TypeError(f"unsupported type: {tp}")
+    
     def visit_stmt(self, node:stmt.Stmt) -> list[Stmt]:
         """Stmtを返すvisiter"""
         # what the fuck!?
@@ -301,7 +320,12 @@ class IRGenerator:
                         return [*left.stmt, Move(variable, left.exp)]
                     # 何もしなくていいよん
                     # デフォ値
-                    return [Move(variable, self.get_default_data())]
+                    if not node.tp:
+                        raise
+                    dv = self.default_value(node.tp)
+                    if dv:
+                        return [Move(variable, dv)]
+                    raise
 
             # 式・返値系
             case stmt.ExprStmt():
