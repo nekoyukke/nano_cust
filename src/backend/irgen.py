@@ -65,6 +65,8 @@ class IRGenerator:
         self.temps: list[Variable] = []
         self.sprite_variable: dict[symbol.Symbol, Variable] = {}
         self.sprite_list: dict[symbol.Symbol, ListInfo] = {}
+        self.list_handles: dict[int, Variable] = {}
+        self.next_list_handle = 1
 
     def new_variable(self, name:str, es:bool = False) -> Variable:
         """変数追加"""
@@ -233,6 +235,12 @@ class IRGenerator:
         current_list = self.new_list(name, None)
         self.sprite[self.sprite_pos].lists.append(current_list)
         self.sprite_list[storage_symbol] = current_list
+        # A list value is passed as a scalar handle.  The current direct-list
+        # storage uses this stable handle as its reference identity; the arena
+        # allocator can retain the same public handle convention.
+        handle = self.new_variable(f"{name}.__handle__")
+        self.list_handles[id(current_list)] = handle
+        self.sprite[self.sprite_pos].variables.append(handle)
         current_name = f"{name}.__inner__"
         current_tp = tp.element
         while isinstance(current_tp, type.ListType):
@@ -341,6 +349,15 @@ class IRGenerator:
             return self.sprite_variable[sym]
         if sym in self.sprite_list:
             return self.sprite_list[sym]
+        # Function-local declarations are introduced by the resolver after
+        # sprite storage has been prepared.  Materialize their Scratch storage
+        # on first use instead of requiring them to be sprite fields.
+        if isinstance(sym, symbol.VariableSymbol) and sym in self.ctx.val_type:
+            self._register_storage_item(sym, self.ctx.val_type[sym], sym)
+            if sym in self.sprite_variable:
+                return self.sprite_variable[sym]
+            if sym in self.sprite_list:
+                return self.sprite_list[sym]
         raise KeyError(sym)
 
     def default_value(self, tp: type.Type) -> Expr | None:
@@ -369,7 +386,12 @@ class IRGenerator:
                     raise
                 storage = self.get_val_list(sym)
                 if isinstance(storage, ListInfo):
-                    return [ListReset(storage)]
+                    handle = self.list_handles.get(id(storage))
+                    initial: list[Stmt] = [ListReset(storage)]
+                    if handle is not None:
+                        initial.append(Move(handle, ImmExpr(Number(self.next_list_handle))))
+                        self.next_list_handle += 1
+                    return initial
                 if node.left:
                     left = self.visit_expr(node.left)
                     return [*left.stmt, Move(storage, left.exp)]
@@ -521,6 +543,9 @@ class IRGenerator:
                     )
                 storage = self.get_val_list(node.sym)
                 if not isinstance(storage, Variable):
+                    handle = self.list_handles.get(id(storage))
+                    if handle is not None:
+                        return Expr_Result(VariableExpr(handle))
                     raise TypeError("a Scratch list cannot be used as a scalar expression")
                 return Expr_Result(VariableExpr(storage))
             case expr.CallExpr():
@@ -551,6 +576,33 @@ class IRGenerator:
                         self.get_function(node.call.member.sym, target_sprite),
                         values,
                         preceding,
+                    )
+                if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop"}:
+                    if not isinstance(node.call.expr, expr.Variable) or not node.call.expr.sym:
+                        raise NotImplementedError("list methods require a named list")
+                    list_id = self.get_val_list(node.call.expr.sym)
+                    if not isinstance(list_id, ListInfo):
+                        raise TypeError("list method receiver must be a list")
+                    if node.call.member.ident == "push":
+                        if len(values) != 1:
+                            raise ValueError("list.push requires exactly one argument")
+                        return Expr_Result(
+                            ImmExpr(Number(0)),
+                            [*preceding, ListPush(list_id, values[0])],
+                        )
+                    if values:
+                        raise ValueError("list.pop takes no arguments")
+                    result = self.get_temp()
+                    return Expr_Result(
+                        VariableExpr(result),
+                        [
+                            *preceding,
+                            Move(result, ListGet(
+                                list_id,
+                                Sub(ListLength(list_id), ImmExpr(Number(1))),
+                            )),
+                            ListPop(list_id),
+                        ],
                     )
                 if isinstance(node.call, expr.MemberExpr) and isinstance(node.call.member.sym, symbol.MethodSymbol):
                     receiver = self.visit_expr(node.call.expr)

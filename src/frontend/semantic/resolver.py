@@ -368,8 +368,11 @@ class Resolver():
                             return self.ctx.val_type[sym_]
                     # else:
                 elif sym in self.ctx.func_type: # tp looks like toilet paper.
-                    if isinstance(sym, symbol.FunctionSymbol) and isinstance(sym.decl, stmt.FunctionDeclStmt) and sym.decl.tp:
-                        return sym.decl.tp
+                    if isinstance(sym, symbol.FunctionSymbol):
+                        # declare_sprite_types registers every sprite function
+                        # before any body is visited, so forward calls must use
+                        # Context rather than waiting for decl.tp to be set.
+                        return self.ctx.func_type[sym]
                     # else:
                 elif sym in self.ctx.types.values() and isinstance(sym, symbol.ClassSymbol):
                     # self.ctx.func_type looks like fuck_type
