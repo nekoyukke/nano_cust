@@ -18,6 +18,22 @@ import src.frontend.ast.type as types
 from src.utils.error.collector import KinakoCollectorError
 from src.utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
 
+
+# Built-ins intentionally have no user-declarable symbol: IRGen recognizes
+# their names and emits native Scratch blocks instead of a custom procedure.
+BUILTIN_FUNCTIONS: dict[str, tuple[types.Type, list[types.Type]]] = {
+    "Move": (types.NumberType(), [types.NumberType(), types.NumberType()]),
+    "MoveSteps": (types.NumberType(), [types.NumberType()]),
+    "TurnRight": (types.NumberType(), [types.NumberType()]),
+    "TurnLeft": (types.NumberType(), [types.NumberType()]),
+    "SetDirection": (types.NumberType(), [types.NumberType()]),
+    "PenDown": (types.NumberType(), []),
+    "PenUp": (types.NumberType(), []),
+    "PenColor": (types.NumberType(), [types.StringType()]),
+    "PenSize": (types.NumberType(), [types.NumberType()]),
+    "ClearPen": (types.NumberType(), []),
+}
+
 class Resolver():
     def __init__(self, program: stmt.ProgramStmt, source:str, ctx:Context, scp:Scope) -> None:
         self.program: stmt.ProgramStmt = program
@@ -162,15 +178,8 @@ class Resolver():
     def visit_foreach(self, node:stmt.ForEachStmt):
         # (=^.^=) < hello ~
         itt_tp = self.visit_expr(node.iterator)
-        var_tp = self.visit_expr(node.variable) # now now cow now cow cow
         if not isinstance(itt_tp, types.ListType):
             self.CallError(f"繰り返し不可能な入力。{itt_tp}", node)
-            return False
-        if not var_tp: # if var is not none
-            self.CallError(f"不明な型。{var_tp}", node)
-            return False
-        if not itt_tp.element == var_tp:
-            self.CallError(f"繰り返し不可能な型。{itt_tp} not eq {var_tp}", node)
             return False
         self.scope = self.scope.push() # push corn
         # smybloo
@@ -179,7 +188,8 @@ class Resolver():
             node
         )
         self.scope.sym[node.variable.ident] = sym
-        self.ctx.val_type[sym] = var_tp
+        self.ctx.val_type[sym] = itt_tp.element
+        node.variable.sym = sym
         ret = self.visit_stmt(node.loop)
         self.scope = self.scope.pop() # pop corn!!!
         return ret
@@ -201,13 +211,12 @@ class Resolver():
             return False
         # what???????
         self.scope = self.scope.push() # push corn <= ???
-        ret =  self.visit_stmt(node.then_stmt)
+        then_returns = self.visit_stmt(node.then_stmt)
         self.scope = self.scope.pop() # pop corn!!!
         self.scope = self.scope.push() # push corn <= ???
-        if node.else_stmt: ret = ret and self.visit_stmt(node.else_stmt)
-        else: ret = ret and False
+        else_returns = self.visit_stmt(node.else_stmt) if node.else_stmt else False
         self.scope = self.scope.pop() # pop corn!!!
-        return ret
+        return then_returns and else_returns
         
     def visit_variable(self, node:stmt.VariableDeclStmt):
         tp:types.Type = self.TypeDef2Type(node.contract)
@@ -262,6 +271,12 @@ class Resolver():
             self.CallError("Sprite symbol was not collected", node)
             return
         self.sprite_sym = sprite_symbol
+        # Sprite-local functions share a declaration scope so that direct and
+        # forward calls can resolve while each function body gets its own
+        # nested scope in visit_function().
+        self.scope = self.scope.push()
+        for function_symbol in sprite_symbol.functions:
+            self.scope.sym[function_symbol.name] = function_symbol
         self.ctx.sprites_args[self.sprite_sym] = []
         self.ctx.sprites_func[self.sprite_sym] = []
         self.ctx.sprites_variable[self.sprite_sym] = []
@@ -270,6 +285,7 @@ class Resolver():
             self.ctx.sprites_args[self.sprite_sym] += function_symbol.parms
             self.ctx.sprites_func[self.sprite_sym].append(function_symbol)
             self.visit_function(function_node, function_symbol)
+        self.scope = self.scope.pop()
 
     def declare_sprite_types(self, node:stmt.SpriteDeclStmt):
         sprite_symbol = self.scope.get_global().sym.get(node.name.ident)
@@ -300,6 +316,8 @@ class Resolver():
             mb.tp = tp
             mb.name.sym = ms
             self.scope.sym[mb.name.ident] = ms
+        for method_symbol in sym_cls.method:
+            self.scope.sym[method_symbol.fnc.name] = method_symbol
         # for md,cmd in zip(node.method, sym_cls.method):
         for i in range(len(node.method)):
             md, cmd = node.method[i], sym_cls.method[i]
@@ -335,6 +353,9 @@ class Resolver():
                 sym = self.scope.lookup(node.ident)
                 node.sym = sym
                 if not sym: # if none
+                    builtin = BUILTIN_FUNCTIONS.get(node.ident)
+                    if builtin:
+                        return types.Function(builtin[0], builtin[1])
                     self.CallError("symbolが不明。宣言されていません。", node)
                     return None
                 if sym in self.ctx.val_type:# in variable
@@ -466,10 +487,12 @@ class Resolver():
                         if node.member.ident in mm:
                             # ok
                             idx = mm.index(node.member.ident)
+                            node.member.sym = sym.member[idx]
                             return self.ctx.member_type[sym.member[idx]]
                         if node.member.ident in mb:
                             # ok
                             idx = mb.index(node.member.ident)
+                            node.member.sym = sym.method[idx]
                             return self.ctx.method_type[sym.method[idx]]
                         # うんこ(Unknown)
                         self.CallError("不明なメンバー名", node)
@@ -497,6 +520,9 @@ class Resolver():
 
             case expr.StringLiteral():
                 return types.StringType()
+
+            case expr.NewExpr():
+                return self.TypeDef2Type(node.types)
 
             case _:
                 pass

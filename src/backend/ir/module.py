@@ -90,6 +90,7 @@ class Sprite():
     func: list[Function]
     lists: list[ListInfo]
     variables: list[Variable]
+    name: str = "Sprite"
     def __repr__(self) -> str:
         return self.format_repr()
     def format_repr(self, indent: int = 0) -> str:

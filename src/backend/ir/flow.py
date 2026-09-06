@@ -92,11 +92,23 @@ class Branch(Stmt):
     false_label: Block | None
 
 @dataclass
+class While(Stmt):
+    cond: BoolExpr
+    body: Block
+
+@dataclass
 class Return(Stmt):
     value: Expr | None = None
 
 
 @dataclass
-class Call(Expr):
+class Call(Stmt):
     callee: Function
+    params: list[Expr]
+
+
+@dataclass
+class BuiltinCall(Stmt):
+    """A target-native Scratch operation exposed as a nano_cust function."""
+    name: str
     params: list[Expr]

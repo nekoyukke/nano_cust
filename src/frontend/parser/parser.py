@@ -499,7 +499,7 @@ class Parser():
         return self.left_binary_op(self.equality, {TokenType.LOGIC_AND:_expr.BinaryKind.LOGIC_AND}, self._make_logical)
 
     def equality(self) -> _expr.Expr:
-        return self.left_binary_op(self.comparison, {TokenType.EQ:_expr.LogicKind.EQ, TokenType.NE:_expr.LogicKind.NE}, self._make_binary)
+        return self.left_binary_op(self.comparison, {TokenType.EQ:_expr.LogicKind.EQ, TokenType.NE:_expr.LogicKind.NE}, self._make_logical)
 
     def comparison(self) -> _expr.Expr:
         return self.left_binary_op(self.term, {
@@ -507,13 +507,17 @@ class Parser():
             TokenType.GE: _expr.LogicKind.GE,
             TokenType.RABRACKET: _expr.LogicKind.GT,
             TokenType.LE: _expr.LogicKind.LE
-        }, self._make_binary)
+        }, self._make_logical)
 
     def term(self) -> _expr.Expr:
         return self.left_binary_op(self.factor, {TokenType.PLUS:_expr.BinaryKind.PLUS, TokenType.MINUS:_expr.BinaryKind.MINUS}, self._make_binary)
 
     def factor(self) -> _expr.Expr:
-        return self.left_binary_op(self.prefix, {TokenType.MULT:_expr.BinaryKind.MULT, TokenType.DIV:_expr.BinaryKind.DIV}, self._make_binary)
+        return self.left_binary_op(self.prefix, {
+            TokenType.MULT: _expr.BinaryKind.MULT,
+            TokenType.DIV: _expr.BinaryKind.DIV,
+            TokenType.MOD: _expr.BinaryKind.MOD,
+        }, self._make_binary)
     
     def prefix(self) -> _expr.Expr:
         # prefix (前置演算)

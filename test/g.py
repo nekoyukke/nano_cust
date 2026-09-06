@@ -8,6 +8,17 @@ from src.frontend.ast.stmt import ProgramStmt
 from src.frontend.ast.scope import Scope
 
 from src.frontend.ast.context import Context
+import json
+import tempfile
+import zipfile
+from pathlib import Path
+from src.backend.irgen import IRGenerator
+from src.backend.tosb3 import compile_to_sb3
+from src.frontend.ast.context import Context
+from src.frontend.lexer.lexer import Lexer
+from src.frontend.parser.parser import Parser
+from src.frontend.semantic.collector import Collector
+from src.frontend.semantic.resolver import Resolver
 
 def parse(string: str):
     pas = Parser(Lexer(string).tokenize(), string)
@@ -45,23 +56,25 @@ sprite Main {
     fn main() -> int {
         let v:Vector3 = new Vector3;
         v.init();
-        Hero.jump(1);
+        Move(0, 0);
+        PenDown();
+        Move(90,90);
+        PenUp();
         return 0;
     }
 }
-sprite Hero {
-    fn jump(height: int) -> int { return height; }
-}
 """
-
-print(ast:=parse(string))
-print("collected")
-print(*(cc:=collect(ast,string)), sep="\n"*3)
-print("\n"*3)
-print("resolved")
-print(*(re := resolver(ast,string,cc[1],cc[0])), sep="\n"*3)
+def build(source: str):
+    context = Context({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    program = Parser(Lexer(source).tokenize(), source).parse()
+    scope = Collector(program, source, context).collect()
+    resolver = Resolver(program, source, context, scope)
+    resolver.resolve()
+    if resolver.error:
+        raise AssertionError(resolver.error)
+    return IRGenerator(program, source, context).visit()
 
 from src.backend.irgen import IRGenerator
 
-irg = IRGenerator(ast, string, cc[1])
-print(irg.visit())
+module = build(string)
+output = compile_to_sb3(module, "build/program.sb3")
