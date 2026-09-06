@@ -1,0 +1,124 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "nano_cust",
+  "scopeName": "source.nano-cust",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#function-calls" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.nano-cust",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.nano-cust",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.nano-cust",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.nano-cust",
+          "match": "(?<![[:alnum:]_])(?:\\d+\\.\\d*|\\.\\d+|\\d+)(?![[:alnum:]_])"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(class|sprite)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.nano-cust" },
+            "2": { "name": "entity.name.type.class.nano-cust" }
+          }
+        },
+        {
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.nano-cust" },
+            "2": { "name": "entity.name.function.nano-cust" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nano-cust",
+          "match": "\\b(if|elif|else|while|for|in|return|new|save|unsave)\\b"
+        },
+        {
+          "name": "storage.modifier.nano-cust",
+          "match": "\\blet\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.builtin.nano-cust",
+          "match": "\\b(int|number|string|boolean|list)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.nano-cust",
+          "match": "\\b(Move|MoveSteps|TurnRight|TurnLeft|SetDirection|PenDown|PenUp|PenColor|PenSize|ClearPen)\\b"
+        },
+        {
+          "name": "support.function.collection.nano-cust",
+          "match": "\\b(push|pop|length)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.nano-cust",
+          "match": "\\b(null|none|true|false)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.nano-cust",
+          "match": "->|&&|\\|\\||==|!=|<=|>=|[+*/%<>=!-]"
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "variable.function.nano-cust",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"
+        }
+      ]
+    }
+  }
+}

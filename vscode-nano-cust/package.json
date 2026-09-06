@@ -1,0 +1,35 @@
+{
+  "name": "nano-cust",
+  "displayName": "nano_cust",
+  "description": "Syntax highlighting and editor support for nano_cust source files.",
+  "version": "0.1.0",
+  "publisher": "nano-cust",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nano-cust",
+        "aliases": [
+          "nano_cust",
+          "Nano Cust"
+        ],
+        "extensions": [
+          ".nc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nano-cust",
+        "scopeName": "source.nano-cust",
+        "path": "./syntaxes/nano-cust.tmLanguage.json"
+      }
+    ]
+  }
+}

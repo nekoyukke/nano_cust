@@ -17,6 +17,7 @@ import src.frontend.ast.type as types
 
 from src.utils.error.collector import KinakoCollectorError
 from src.utils.error.base import KinakoHelp, KinakoRelatedInfo, KinakoBaseError
+from src.utils.error.type import KinakoTypeError
 
 
 # Built-ins intentionally have no user-declarable symbol: IRGen recognizes
@@ -35,7 +36,7 @@ BUILTIN_FUNCTIONS: dict[str, tuple[types.Type, list[types.Type]]] = {
 }
 
 class Resolver():
-    def __init__(self, program: stmt.ProgramStmt, source:str, ctx:Context, scp:Scope) -> None:
+    def __init__(self, program: stmt.ProgramStmt, source:str, ctx:Context, scp:Scope, *, force_type: bool = False) -> None:
         self.program: stmt.ProgramStmt = program
         self.source: str = source
         self.scope:Scope = scp
@@ -43,6 +44,11 @@ class Resolver():
         self.error:list[KinakoBaseError] = []
         self.ret_tp: types.Type | None = None
         self.sprite_sym:symbol.SpriteSymbol | None = None
+        self.force_type = force_type
+
+    def CallTypeError(self, message: str, node: base.ASTNode) -> None:
+        if not self.force_type:
+            self.error.append(KinakoTypeError(message, node.line, node.col, self.source, node.len))
 
 
     def CallError(
@@ -172,7 +178,7 @@ class Resolver():
     def visit_return(self, node:stmt.ReturnStmt):
         tp = self.visit_expr(node.expr)
         if self.ret_tp != tp:
-            self.CallError(f"型が一致しません。宣言元:{self.ret_tp}実際の方:{tp}", node)
+            self.CallTypeError(f"型が一致しません。宣言元:{self.ret_tp}実際の方:{tp}", node)
         return True
 
     def visit_foreach(self, node:stmt.ForEachStmt):
@@ -200,9 +206,11 @@ class Resolver():
             self.CallError(f"Boolean値のみの入力。{cond_tp}", node)
             return False
         self.scope = self.scope.push() # push corn
-        ret = self.visit_stmt(node.loop)
+        self.visit_stmt(node.loop)
         self.scope = self.scope.pop() # pop corn!!!
-        return ret
+        # A while body may not execute at all, therefore a return in its body
+        # cannot prove that the surrounding function returns on every path.
+        return False
 
     def visit_if(self, node:stmt.Ifstmt):
         cond_tp = self.visit_expr(node.cond)
@@ -219,11 +227,14 @@ class Resolver():
         return then_returns and else_returns
         
     def visit_variable(self, node:stmt.VariableDeclStmt):
+        if node.name.ident in self.scope.sym:
+            self.CallError_Symbol(node, node.name.ident)
+            return
         tp:types.Type = self.TypeDef2Type(node.contract)
         if node.left:
             if (tp_left := self.visit_expr(node.left)):
                 if tp != tp_left:
-                    self.CallError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", node)
+                    self.CallTypeError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", node)
         node.tp = tp
         sym = symbol.VariableSymbol(
             node.name.ident,
@@ -307,6 +318,9 @@ class Resolver():
         for i in range(len(node.member)):
             mb, ms = node.member[i], sym_cls.member[i]
             tp:types.Type = self.TypeDef2Type(mb.contract)
+            if isinstance(tp, types.ListType):
+                self.CallError("クラスの list 型フィールドはまだサポートされていません。", mb)
+                continue
             if mb.left:
                 if (tp_left := self.visit_expr(mb.left)):
                     if tp != tp_left:
@@ -389,11 +403,17 @@ class Resolver():
                 lt = self.visit_expr(node.left)
                 rt = self.visit_expr(node.right)
                 if not (lt and rt):
-                    self.CallError(f"型演算が失敗しました。", node)
+                    self.CallTypeError("型演算が失敗しました。", node)
                     return None
-                if lt == rt:
-                    return lt
-                self.CallError(f"型が違います。{lt}と{rt}", node)
+                if node.op in (expr.BinaryKind.LOGIC_AND, expr.BinaryKind.LOGIC_OR):
+                    if isinstance(lt, types.BooleanType) and isinstance(rt, types.BooleanType):
+                        return types.BooleanType()
+                    self.CallTypeError("論理演算は boolean 型どうしにだけ適用できます。", node)
+                    return types.BooleanType() if self.force_type else None
+                if isinstance(lt, types.NumberType) and isinstance(rt, types.NumberType):
+                    return types.NumberType()
+                self.CallTypeError("算術演算は number 型どうしにだけ適用できます。", node)
+                return types.NumberType() if self.force_type else None
             case expr.LogicExpr():
                 lt = self.visit_expr(node.left)
                 rt = self.visit_expr(node.right)
@@ -409,14 +429,18 @@ class Resolver():
                 lt = self.visit_expr(node.left)
                 rt = self.visit_expr(node.right)
                 if not (lt and rt):
-                    self.CallError(f"型演算が失敗しました。", node)
+                    self.CallTypeError("型演算が失敗しました。", node)
                     return None
                 if lt == rt:
                     return lt
-                self.CallError(f"型が違います。{lt}と{rt}", node)
+                self.CallTypeError(f"型が違います。{lt}と{rt}", node)
+                return lt if self.force_type else None
             case expr.UnaryExpr():
-                # 単項演算子 (+x, -x など)
-                return self.visit_expr(node)
+                operand_type = self.visit_expr(node.expr)
+                if not isinstance(operand_type, types.NumberType):
+                    self.CallTypeError("単項 + / - は number 型にだけ適用できます。", node)
+                    return types.NumberType() if self.force_type else None
+                return operand_type
 
             case expr.CallExpr():
                 # 関数呼び出し (foo(a, b))
@@ -506,6 +530,8 @@ class Resolver():
                             return types.Function(types.BooleanType(), [base.element])
                         if node.member.ident == "pop":
                             return types.Function(base.element, [])
+                        if node.member.ident == "length":
+                            return types.Function(types.NumberType(), [])
                     case types.StringType():
                         pass
                     case types.BooleanType():

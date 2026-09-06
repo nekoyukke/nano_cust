@@ -65,6 +65,7 @@ class IRGenerator:
         self.temps: list[Variable] = []
         self.sprite_variable: dict[symbol.Symbol, Variable] = {}
         self.sprite_list: dict[symbol.Symbol, ListInfo] = {}
+        self.list_parameters: dict[symbol.ArgsSymbol, ListInfo] = {}
         self.list_handles: dict[int, Variable] = {}
         self.next_list_handle = 1
 
@@ -277,6 +278,10 @@ class IRGenerator:
             self.sprite_variable[p] = val
             self.sprite[self.sprite_pos].variables.append(val)
             args.append(val) # おいしい
+            if isinstance(self.ctx.args_type[p], type.ListType):
+                list_param = self.new_list(self._storage_name(p) + ".__list__", None)
+                self.list_parameters[p] = list_param
+                self.sprite[self.sprite_pos].lists.append(list_param)
         name = node.name.ident
         if inner_name:
             name += inner_name
@@ -345,6 +350,8 @@ class IRGenerator:
                 pass
         
     def get_val_list(self, sym:symbol.Symbol) -> Variable | ListInfo:
+        if isinstance(sym, symbol.ArgsSymbol) and sym in self.list_parameters:
+            return self.list_parameters[sym]
         if sym in self.sprite_variable:
             return self.sprite_variable[sym]
         if sym in self.sprite_list:
@@ -559,7 +566,8 @@ class IRGenerator:
                     )
                 if isinstance(node.call, expr.Variable):
                     if isinstance(node.call.sym, symbol.FunctionSymbol):
-                        return self.emit_call(self.get_function(node.call.sym), values, preceding)
+                        transfers = self.list_argument_transfers(node.call.sym, node.args)
+                        return self.emit_call(self.get_function(node.call.sym), values, preceding, list_transfers=transfers)
                     if isinstance(node.call.sym, symbol.MethodSymbol):
                         return self.emit_call(
                             self.get_function(node.call.sym.fnc),
@@ -577,7 +585,7 @@ class IRGenerator:
                         values,
                         preceding,
                     )
-                if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop"}:
+                if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop", "length"}:
                     if not isinstance(node.call.expr, expr.Variable) or not node.call.expr.sym:
                         raise NotImplementedError("list methods require a named list")
                     list_id = self.get_val_list(node.call.expr.sym)
@@ -590,6 +598,10 @@ class IRGenerator:
                             ImmExpr(Number(0)),
                             [*preceding, ListPush(list_id, values[0])],
                         )
+                    if node.call.member.ident == "length":
+                        if values:
+                            raise ValueError("list.length takes no arguments")
+                        return Expr_Result(ListLength(list_id), preceding)
                     if values:
                         raise ValueError("list.pop takes no arguments")
                     result = self.get_temp()
@@ -606,11 +618,13 @@ class IRGenerator:
                     )
                 if isinstance(node.call, expr.MemberExpr) and isinstance(node.call.member.sym, symbol.MethodSymbol):
                     receiver = self.visit_expr(node.call.expr)
+                    transfers = self.list_argument_transfers(node.call.member.sym.fnc, node.args)
                     return self.emit_call(
                         self.get_function(node.call.member.sym.fnc),
                         values,
                         [*receiver.stmt, *preceding],
                         receiver.exp,
+                        transfers,
                     )
                 raise NotImplementedError("unsupported call target")
             
@@ -686,6 +700,7 @@ class IRGenerator:
         params: list[Expr],
         preceding: list[Stmt],
         receiver: Expr | None = None,
+        list_transfers: list[tuple[ListInfo, ListInfo]] | None = None,
     ) -> Expr_Result:
         """Emit a call frame and materialize its result in a temporary.
 
@@ -696,19 +711,66 @@ class IRGenerator:
         result = self.get_temp()
         top = lambda: ListLength(self.return_stack)
         target = receiver or VariableExpr(self.current_object)
+        # Scratch variables are sprite-wide.  Save the caller's scalar locals
+        # and temporaries so recursive/re-entrant calls cannot overwrite them.
+        protected = {id(self.trash), id(self.current_object), id(self.return_value), id(result)}
+        frame_variables = [
+            variable for variable in self.sprite[self.sprite_pos].variables
+            if id(variable) not in protected
+        ]
+        list_transfers = list_transfers or []
+        copy_in = [instruction for source, destination in list_transfers for instruction in self.copy_list(source, destination)]
+        copy_out = [instruction for source, destination in list_transfers for instruction in self.copy_list(destination, source)]
         instructions: list[Stmt] = [
             *preceding,
+            *copy_in,
+            *[ListPush(self.Frame, VariableExpr(variable)) for variable in frame_variables],
             ListPush(self.return_stack, VariableExpr(self.current_object)),
             ListPush(self.return_stack, VariableExpr(self.return_value)),
             Move(self.current_object, target),
             Call(callee, params),
             Move(result, VariableExpr(self.return_value)),
+            *[
+                instruction
+                for variable in reversed(frame_variables)
+                for instruction in (
+                    Move(variable, ListGet(self.Frame, ListLength(self.Frame))),
+                    ListDelete(self.Frame, ListLength(self.Frame)),
+                )
+            ],
             Move(self.return_value, ListGet(self.return_stack, top())),
             ListDelete(self.return_stack, top()),
             Move(self.current_object, ListGet(self.return_stack, top())),
             ListDelete(self.return_stack, top()),
+            *copy_out,
         ]
         return Expr_Result(VariableExpr(result), instructions)
+
+    def list_argument_transfers(self, callee: symbol.FunctionSymbol, arguments: list[expr.Expr]) -> list[tuple[ListInfo, ListInfo]]:
+        transfers: list[tuple[ListInfo, ListInfo]] = []
+        for parameter, argument in zip(callee.parms, arguments):
+            if not isinstance(self.ctx.args_type[parameter], type.ListType):
+                continue
+            if not isinstance(argument, expr.Variable) or not argument.sym:
+                raise TypeError("list arguments must be named lists")
+            source = self.get_val_list(argument.sym)
+            destination = self.list_parameters[parameter]
+            if not isinstance(source, ListInfo):
+                raise TypeError("list argument must be a list")
+            transfers.append((source, destination))
+        return transfers
+
+    def copy_list(self, source: ListInfo, destination: ListInfo) -> list[Stmt]:
+        index = self.get_temp()
+        body = Block([
+            ListPush(destination, ListGet(source, VariableExpr(index))),
+            Move(index, Add(VariableExpr(index), ImmExpr(Number(1)))),
+        ])
+        return [
+            ListReset(destination),
+            Move(index, ImmExpr(Number(0))),
+            While(Lt(VariableExpr(index), ListLength(source)), body),
+        ]
 
     def visit_assign_expr(self, node:expr.AssignExpr) -> Expr_Result:
         right = self.visit_expr(node.right)

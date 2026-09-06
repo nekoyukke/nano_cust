@@ -88,16 +88,15 @@ class Parser():
         tok = self.advance()
 
         if tok.type == TokenType.LBRACE:
-            while not self.peek().type == TokenType.RBRACE:
+            while not self.is_at_end() and not self.peek().type == TokenType.RBRACE:
                 self.advance()
-            self.advance()
-            print(self.peek())
+            if self.check(TokenType.RBRACE):
+                self.advance()
             return
 
         while not self.is_at_end():
             # セミコロンの直後なら、次の文から再開できる可能性が高い
             if self.previous().type == TokenType.SEMI:
-                print(self.peek())
                 return
 
             # 次の文の開始キーワードを見つけたら、そこで同期
@@ -105,7 +104,6 @@ class Parser():
                 TokenType.FN, TokenType.IF, 
                 TokenType.FOR, TokenType.WHILE, TokenType.RETURN
             }:
-                print(self.peek())
                 return
 
             self.advance()
@@ -162,7 +160,11 @@ class Parser():
             case TokenType.LBRACE:
                 return self.block_node()
             case TokenType.IMPORT:
-                return self.import_node()
+                token = self.peek()
+                self.CallError(
+                    "import はまだサポートされていません。",
+                    _base.ASTNode(token.line, token.column, token.len),
+                )
             case TokenType.CLASS:
                 return self.class_node()
             case TokenType.SPRITE:
@@ -225,12 +227,6 @@ class Parser():
             _expr.Variable(name.line, name.column, name.len, name.value),
             functions
         )
-
-    def import_node(self) -> _stmt.ImportNode:
-        a = self.advance()
-        string = self.consume(TokenType.STRING, "あたいってば天才だね")
-        self.consume(TokenType.SEMI, "ないよ")
-        return _stmt.ImportNode(a.line, a.column, a.len, string.value)
 
     def get_variable(self, message:str) -> _expr.Variable:
         result = self.consume(TokenType.ID, message)
@@ -492,11 +488,11 @@ class Parser():
         return self.left_binary_op(
             self.logical_and,
             {TokenType.LOGIC_OR:_expr.BinaryKind.LOGIC_OR},
-            self._make_logical
+            self._make_binary
         )
 
     def logical_and(self) -> _expr.Expr:
-        return self.left_binary_op(self.equality, {TokenType.LOGIC_AND:_expr.BinaryKind.LOGIC_AND}, self._make_logical)
+        return self.left_binary_op(self.equality, {TokenType.LOGIC_AND:_expr.BinaryKind.LOGIC_AND}, self._make_binary)
 
     def equality(self) -> _expr.Expr:
         return self.left_binary_op(self.comparison, {TokenType.EQ:_expr.LogicKind.EQ, TokenType.NE:_expr.LogicKind.NE}, self._make_logical)

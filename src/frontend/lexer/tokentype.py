@@ -4,8 +4,8 @@ class TokenType(Enum):
     # 演算子
     COMMENT = r'//[^\n]*'
     
-    DOT = r'\.'
     DOUBLE_DOT = r'\.\.'
+    DOT = r'\.'
     ARROW = r'->'
 
     EQ = r'=='
@@ -17,10 +17,10 @@ class TokenType(Enum):
     MINUS = r'-'
     MULT = r'\*'
     DIV = r'/'
-    ADDR = r'&'
     MOD = r'%'
     LOGIC_OR = r'\|\|'
     LOGIC_AND = r'&&'
+    ADDR = r'&'
 
     ASSIGN = r'='
     AS = r'as\b'

@@ -1,8 +1,8 @@
 import unittest
 
-from src.backend.ir.list import ListGet
+from src.backend.ir.list import ListGet, ListLength
 from src.backend.ir.flow import While
-from src.backend.ir.stmt import ListReset, ListSet, Move
+from src.backend.ir.stmt import ListPush, ListReset, ListSet, Move
 from src.backend.irgen import IRGenerator
 from src.frontend.ast.context import Context
 from src.frontend.lexer.lexer import Lexer
@@ -60,6 +60,43 @@ class ListIRTests(unittest.TestCase):
             isinstance(instruction, While)
             for instruction in module.sprites[0].func[0].instr.instr
         ))
+
+    def test_list_argument_is_available_to_for_in_and_copied_back(self):
+        module = build("""
+            sprite Main {
+                fn append_one(values: list int) -> int {
+                    values.push(1);
+                    for value in values { }
+                    return 0;
+                }
+                fn main() -> int {
+                    let values: list int;
+                    append_one(values);
+                    return values[0];
+                }
+            }
+        """)
+
+        sprite = module.sprites[0]
+        main_instructions = sprite.func[-1].instr.instr
+        self.assertTrue(any(isinstance(instruction, ListReset) for instruction in main_instructions))
+        self.assertTrue(any(isinstance(instruction, ListPush) for instruction in main_instructions))
+        self.assertTrue(any(isinstance(instruction, While) for instruction in sprite.func[0].instr.instr))
+
+    def test_list_length_returns_a_number_expression(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let values: list int;
+                    values.push(10);
+                    return values.length();
+                }
+            }
+        """)
+
+        value_move = module.sprites[0].func[0].instr.instr[-2]
+        self.assertIsInstance(value_move, Move)
+        self.assertIsInstance(value_move.value, ListLength)
 
 
 

@@ -1,4 +1,4 @@
-from utils.error.base import KinakoBaseError, KinakoRelatedInfo, KinakoHelp
+from src.utils.error.base import KinakoBaseError, KinakoRelatedInfo, KinakoHelp
 
 class KinakoTypeError(KinakoBaseError):
     pass

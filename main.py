@@ -13,15 +13,22 @@ from src.frontend.lexer.lexer import Lexer
 from src.frontend.parser.parser import Parser
 from src.frontend.semantic.collector import Collector
 from src.frontend.semantic.resolver import Resolver
+from src.utils.error.base import KinakoBaseError
 
 
-def compile_source(source_path: Path, output_path: Path, *, check_only: bool = False) -> Path | None:
+def compile_source(source_path: Path, output_path: Path, *, check_only: bool = False, force_type: bool = False) -> Path | None:
     """Compile one nano_cust source file, raising ``ValueError`` on diagnostics."""
     source = source_path.read_text(encoding="utf-8")
     context = Context({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
-    program = Parser(Lexer(source).tokenize(), source).parse()
-    scope = Collector(program, source, context).collect()
-    resolver = Resolver(program, source, context, scope)
+    parser = Parser(Lexer(source).tokenize(), source)
+    program = parser.parse()
+    if parser.error:
+        raise ValueError("\n".join(map(str, parser.error)))
+    collector = Collector(program, source, context)
+    scope = collector.collect()
+    if collector.error:
+        raise ValueError("\n".join(map(str, collector.error)))
+    resolver = Resolver(program, source, context, scope, force_type=force_type)
     resolver.resolve()
     if resolver.error:
         raise ValueError("\n".join(map(str, resolver.error)))
@@ -45,6 +52,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--check", action="store_true",
         help="parse and type-check only; do not create an .sb3 file",
     )
+    parser.add_argument(
+        "--force-type", "--forcetype", action="store_true",
+        help="allow incompatible scalar types where Scratch coercion is supported",
+    )
     return parser.parse_args(argv)
 
 
@@ -56,8 +67,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     output_path: Path = args.output or source_path.with_suffix(".sb3")
     try:
-        generated = compile_source(source_path, output_path, check_only=args.check)
-    except (OSError, ValueError) as error:
+        generated = compile_source(source_path, output_path, check_only=args.check, force_type=args.force_type)
+    except (OSError, ValueError, KinakoBaseError) as error:
         print(f"nano_cust: error: {error}", file=sys.stderr)
         return 1
     if args.check:

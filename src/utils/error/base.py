@@ -57,7 +57,7 @@ class KinakoBaseError(Exception):
             
         return out
 
-    def __str__(self, is_tb: bool = True) -> str:
+    def __str__(self, is_tb: bool = False) -> str:
         tb = self.format_file_only() if is_tb else ""
         
         lines = self.source.splitlines()

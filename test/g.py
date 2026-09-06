@@ -59,7 +59,7 @@ class Vector3 {
     fn camera(width:int, height:int, focalLength:int) -> Vector2 {
         let postion:Vector2 = new Vector2;
         postion.x = width / 2 + (x * focalLength) / z;
-        postion.x = height / 2 + (x * focalLength) / z;
+        postion.y = height / 2 + (y * focalLength) / z;
         return postion;
     }
 }
@@ -67,15 +67,26 @@ sprite Main {
     fn main() -> int {
         let v1:Vector3 = new Vector3;
         let v2:Vector3 = new Vector3;
-        v1.init();
-        v2.init();
-        let aa:list Vector3;
-        aa.push(v1);
-        aa.push(v2);
-        draw(aa);
+        v1.x = 3;v1.y=3;v1.z=3;
+        v2.x = -3;v2.y=3;v2.z=3;
+        let a1:list Vector3;
+        let a2:list Vector3;
+        a1.push(v1);
+        a2.push(v2);
+        draw(a1,a2);
         return 0;
     }
-    fn draw(points: list Vector3) -> int {
+    fn draw(points1: list Vector3, points2:list Vector3) -> int {
+        let pos:int = 0;
+        while (pos<points1.length()) {
+            let vec1:Vector2 = points1[pos].camera(480,360,30);
+            let vec2:Vector2 = points2[pos].camera(480,360,30);
+            Move(vec1.x, vec1.y);
+            PenDown();
+            Move(vec2.x, vec2.y);
+            PenUp();
+            pos = pos + 1;
+        }
         return 0;
     }
 }
