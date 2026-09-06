@@ -40,26 +40,50 @@ def resolver(program:ProgramStmt, source:str, ctx:Context, scope:Scope):
 
 string=\
 """
+class Vector2 {
+    let x: int;
+    let y: int;
+}
+
 class Vector3 {
-    let x:int;
-    let y:int;
-    let z:int;
-    
-    fn add(dx:int, dy:int, dz:int) -> int {
+    let x: int;
+    let y: int;
+    let z: int;
+
+    fn add(dx: int, dy: int, dz: int) -> int {
+        x = x + dx;
+        y = y + dy;
+        z = z + dz;
         return 0;
     }
+
     fn init() -> int {
+        x = 0;
+        y = 0;
+        z = 0;
         return 0;
+    }
+
+    fn camera() -> Vector2 {
+        let position: Vector2 = new Vector2();
+        position.x = 0;
+        position.y = 0;
+        return position;
     }
 }
+
 sprite Main {
     fn main() -> int {
-        let v:Vector3 = new Vector3;
+        let v: Vector3 = new Vector3();
+
         v.init();
+        v.add(10, 20, 30);
+
         Move(0, 0);
         PenDown();
-        Move(90,90);
+        Move(90, 90);
         PenUp();
+
         return 0;
     }
 }
