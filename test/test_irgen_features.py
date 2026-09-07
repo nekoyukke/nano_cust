@@ -1,7 +1,8 @@
 import unittest
 
+from src.backend.ir.expr import Sub
 from src.backend.ir.flow import Branch, Call, Return, While
-from src.backend.ir.list import ListGet
+from src.backend.ir.list import ListGet, ListLength
 from src.backend.ir.stmt import ListDelete, ListPush, ListSet, Move
 from src.backend.irgen import IRGenerator
 from src.frontend.ast.context import Context
@@ -97,6 +98,42 @@ class IRGeneratorFeatureTests(unittest.TestCase):
         self.assertIsInstance(returned, Return)
         self.assertIsInstance(instructions[-2], Move)
         self.assertIsInstance(instructions[-2].value, ListGet)
+
+    def test_object_handles_and_return_stack_use_zero_based_ir_indices(self):
+        module = build("""
+            class Box {
+                let value: int;
+                fn get() -> int { return value; }
+            }
+            sprite Main {
+                fn main() -> int {
+                    let box: Box = new Box;
+                    return box.get();
+                }
+            }
+        """)
+        main = module.sprites[0].func[-1].instr.instr
+
+        object_id = next(
+            instruction for instruction in main
+            if isinstance(instruction, Move)
+            and isinstance(instruction.value, ListLength)
+            and instruction.value.list_id.list_name.endswith("__Object_Class__")
+        )
+        self.assertIsInstance(object_id.value, ListLength)
+
+        return_stack_reads = [
+            instruction for instruction in main
+            if isinstance(instruction, Move)
+            and isinstance(instruction.value, ListGet)
+            and instruction.value.list_id.list_name.endswith("__ReturnStack__")
+        ]
+        self.assertTrue(return_stack_reads)
+        self.assertTrue(all(
+            isinstance(instruction.value.index, Sub)
+            and instruction.value.index.right.value.value == 1
+            for instruction in return_stack_reads
+        ))
 
     def test_method_call_sets_current_object_and_uses_member_storage(self):
         module = build("""

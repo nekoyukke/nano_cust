@@ -858,8 +858,11 @@ class IRGenerator:
                 address = self.get_temp()
                 instances = self.class_instances[cls]
                 instructions: list[Stmt] = [
-                    Move(result, Add(ListLength(self.object_clstype), ImmExpr(Number(1)))),
-                    Move(address, Add(ListLength(instances), ImmExpr(Number(1)))),
+                    # Object handles and IR list indices are both zero-based.
+                    # The SB3 emitter performs the one-based Scratch conversion
+                    # exactly once when it lowers ListGet/ListSet/ListDelete.
+                    Move(result, ListLength(self.object_clstype)),
+                    Move(address, ListLength(instances)),
                     ListPush(self.object_clstype, ImmExpr(Number(self.class_ids[cls]))),
                     ListPush(self.object_address, VariableExpr(address)),
                     ListPush(instances, ImmExpr(Number(1))),
@@ -897,7 +900,10 @@ class IRGenerator:
         after the callee has produced its result.
         """
         result = self.get_temp() if capture_result else None
-        top = lambda: ListLength(self.return_stack)
+        # ListGet/ListDelete take zero-based IR indices.  The last Scratch
+        # item is therefore length - 1, not length (which would be lowered to
+        # Scratch's out-of-range length + 1).
+        top = lambda: Sub(ListLength(self.return_stack), ImmExpr(Number(1)))
         target = receiver or VariableExpr(self.current_object)
         # Scratch variables are sprite-wide.  Save the caller's scalar locals
         # and temporaries so recursive/re-entrant calls cannot overwrite them.
@@ -924,8 +930,14 @@ class IRGenerator:
                 instruction
                 for variable in reversed(frame_variables)
                 for instruction in (
-                    Move(variable, ListGet(self.Frame, ListLength(self.Frame))),
-                    ListDelete(self.Frame, ListLength(self.Frame)),
+                    Move(variable, ListGet(
+                        self.Frame,
+                        Sub(ListLength(self.Frame), ImmExpr(Number(1))),
+                    )),
+                    ListDelete(
+                        self.Frame,
+                        Sub(ListLength(self.Frame), ImmExpr(Number(1))),
+                    ),
                 )
             ],
             Move(self.return_value, ListGet(self.return_stack, top())),
