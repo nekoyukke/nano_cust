@@ -4,6 +4,20 @@ from src.backend.ir.value import *
 
 
 @dataclass
+class BuiltinExpr(Expr):
+    """A native Scratch reporter exposed as a nano_cust expression."""
+    name: str
+    params: list[Expr]
+
+
+@dataclass
+class BuiltinBoolExpr(BoolExpr):
+    """A native Scratch boolean reporter."""
+    name: str
+    params: list[Expr]
+
+
+@dataclass
 class VariableExpr(Expr):
     value: Variable
 

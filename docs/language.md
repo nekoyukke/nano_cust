@@ -189,8 +189,23 @@ sprite Main {
 | `PenColor(color)` | `string` | ペンの色を設定 |
 | `PenSize(size)` | `number` | ペンの太さを設定 |
 | `ClearPen()` | なし | ペンの描画を消す |
+| `KeyPressed(key)` | `string` | 指定キーが押されているか（`boolean`） |
+| `MousePressed()` | なし | マウスボタンが押されているか（`boolean`） |
+| `MouseX()` | なし | マウスポインタの X 座標 |
+| `MouseY()` | なし | マウスポインタの Y 座標 |
+| `Sin(degrees)` | `number` | 指定角度の正弦 |
+| `Cos(degrees)` | `number` | 指定角度の余弦 |
+| `Tan(degrees)` | `number` | 指定角度の正接 |
 
 ペン関数を使うと、出力プロジェクトには Pen 拡張が自動的に追加されます。
+
+入力は毎フレーム、またはループ内で読むのが基本です。例えば次のように書けます。
+
+```text
+if KeyPressed("ArrowRight") { Move(MouseX(), MouseY()); }
+```
+
+三角関数の角度はラジアンではなく、Scratchと同じ**度数法**です。例えば `Sin(30)` は `0.5` になります。
 
 ## 12. `save` と `unsave`
 

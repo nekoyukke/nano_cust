@@ -170,6 +170,53 @@ class SB3Tests(unittest.TestCase):
         }.issubset(opcodes))
         self.assertIn("pen", project["extensions"])
 
+    def test_keyboard_and_mouse_reporters_lower_to_sensing_blocks(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let x: int = MouseX();
+                    let y: int = MouseY();
+                    if KeyPressed("space") && MousePressed() {
+                        Move(x, y);
+                    }
+                    return 0;
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        opcodes = {
+            block["opcode"] for block in project["targets"][1]["blocks"].values()
+        }
+        self.assertTrue({
+            "sensing_keypressed", "sensing_mousedown", "sensing_mousex", "sensing_mousey",
+        }.issubset(opcodes))
+
+    def test_trigonometric_reporters_lower_to_scratch_math_operations(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let value: int = Sin(30) + Cos(60) + Tan(45);
+                    return value;
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        math_operations = [
+            block for block in project["targets"][1]["blocks"].values()
+            if block["opcode"] == "operator_mathop"
+        ]
+        self.assertEqual({block["fields"]["OPERATOR"][0] for block in math_operations}, {
+            "sin", "cos", "tan",
+        })
+
     def test_non_returning_statement_sequence_is_not_individually_guarded(self):
         module = build("""
             sprite Main {

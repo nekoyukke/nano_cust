@@ -33,6 +33,13 @@ BUILTIN_FUNCTIONS: dict[str, tuple[types.Type, list[types.Type]]] = {
     "PenColor": (types.NumberType(), [types.StringType()]),
     "PenSize": (types.NumberType(), [types.NumberType()]),
     "ClearPen": (types.NumberType(), []),
+    "KeyPressed": (types.BooleanType(), [types.StringType()]),
+    "MousePressed": (types.BooleanType(), []),
+    "MouseX": (types.NumberType(), []),
+    "MouseY": (types.NumberType(), []),
+    "Sin": (types.NumberType(), [types.NumberType()]),
+    "Cos": (types.NumberType(), [types.NumberType()]),
+    "Tan": (types.NumberType(), [types.NumberType()]),
 }
 
 class Resolver():

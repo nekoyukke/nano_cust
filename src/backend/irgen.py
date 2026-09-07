@@ -27,6 +27,10 @@ class Expr_Result():
     exp:Expr
     stmt: list[Stmt] = field(default_factory=list[Stmt])
 
+
+BOOLEAN_BUILTIN_REPORTERS = {"KeyPressed", "MousePressed"}
+VALUE_BUILTIN_REPORTERS = {"MouseX", "MouseY", "Sin", "Cos", "Tan"}
+
 class IRGenerator:
     def __init__(self, Program:stmt.ProgramStmt, source:str, ctx:Context) -> None:
         self.module = Module([], None)
@@ -731,6 +735,10 @@ class IRGenerator:
                 preceding = [instruction for arg in args for instruction in arg.stmt]
                 values = [arg.exp for arg in args]
                 if isinstance(node.call, expr.Variable) and node.call.sym is None:
+                    if node.call.ident in BOOLEAN_BUILTIN_REPORTERS:
+                        return Expr_Result(BuiltinBoolExpr(node.call.ident, values), preceding)
+                    if node.call.ident in VALUE_BUILTIN_REPORTERS:
+                        return Expr_Result(BuiltinExpr(node.call.ident, values), preceding)
                     return Expr_Result(
                         ImmExpr(Number(0)),
                         [*preceding, BuiltinCall(node.call.ident, values)],

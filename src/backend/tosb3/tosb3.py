@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.backend.ir.boolexpr import And, Eq, Ge, Gt, Le, Lt, Ne, Not, Or
-from src.backend.ir.expr import Add, Div, ImmExpr, Mod, Mul, Sub, VariableExpr
+from src.backend.ir.expr import Add, BuiltinBoolExpr, BuiltinExpr, Div, ImmExpr, Mod, Mul, Sub, VariableExpr
 from src.backend.ir.flow import Block, Branch, BuiltinCall, Call, Return, While
 from src.backend.ir.list import ListGet, ListLength
 from src.backend.ir.module import Function, Module, Sprite
@@ -300,6 +300,28 @@ class SB3Emitter:
             return self.primitive(expression.value)
         if isinstance(expression, VariableExpr):
             return self.variable_reporter(expression.value, parent)
+        if isinstance(expression, BuiltinExpr | BuiltinBoolExpr):
+            reporters = {
+                "KeyPressed": ("sensing_keypressed", ("KEY_OPTION",)),
+                "MousePressed": ("sensing_mousedown", ()),
+                "MouseX": ("sensing_mousex", ()),
+                "MouseY": ("sensing_mousey", ()),
+            }
+            if expression.name in {"Sin", "Cos", "Tan"}:
+                block_id = self.block("operator_mathop", parent=parent)
+                self.blocks[block_id]["fields"] = {
+                    "OPERATOR": [expression.name.lower(), None]
+                }
+                self.reporter_input(block_id, "NUM", self.expr(expression.params[0]))
+                return block_id
+            try:
+                opcode, inputs = reporters[expression.name]
+            except KeyError as error:
+                raise NotImplementedError(f"unsupported builtin reporter: {expression.name}") from error
+            block_id = self.block(opcode, parent=parent)
+            for input_name, value in zip(inputs, expression.params):
+                self.reporter_input(block_id, input_name, self.expr(value))
+            return block_id
         if isinstance(expression, ListLength):
             return self.list_length(expression.list_id, parent)
         if isinstance(expression, ListGet):
