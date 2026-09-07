@@ -306,11 +306,23 @@ class SB3Emitter:
                 "MousePressed": ("sensing_mousedown", ()),
                 "MouseX": ("sensing_mousex", ()),
                 "MouseY": ("sensing_mousey", ()),
+                "Random": ("operator_random", ("FROM", "TO")),
+                "Join": ("operator_join", ("STRING1", "STRING2")),
+                "LetterOf": ("operator_letter_of", ("LETTER", "STRING")),
+                "TextLength": ("operator_length", ("STRING",)),
+                "Contains": ("operator_contains", ("STRING1", "STRING2")),
+                "Round": ("operator_round", ("NUM",)),
             }
-            if expression.name in {"Sin", "Cos", "Tan"}:
+            math_operations = {
+                "Abs": "abs", "Floor": "floor", "Ceil": "ceiling", "Sqrt": "sqrt",
+                "Sin": "sin", "Cos": "cos", "Tan": "tan", "Asin": "asin",
+                "Acos": "acos", "Atan": "atan", "Ln": "ln", "Log": "log",
+                "Exp": "e ^", "Exp10": "10 ^",
+            }
+            if expression.name in math_operations:
                 block_id = self.block("operator_mathop", parent=parent)
                 self.blocks[block_id]["fields"] = {
-                    "OPERATOR": [expression.name.lower(), None]
+                    "OPERATOR": [math_operations[expression.name], None]
                 }
                 self.reporter_input(block_id, "NUM", self.expr(expression.params[0]))
                 return block_id

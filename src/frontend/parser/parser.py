@@ -110,6 +110,37 @@ class Parser():
 
     def parse(self):
         return self._Program()
+
+    def decode_string_literal(self, token: Token) -> str:
+        """Convert a quoted source literal into its runtime string value."""
+        raw = token.value
+        assert len(raw) >= 2 and raw[0] == raw[-1] == '"'
+        escapes = {
+            '"': '"',
+            '\\': '\\',
+            'n': '\n',
+            'r': '\r',
+            't': '\t',
+        }
+        decoded: list[str] = []
+        index = 1
+        end = len(raw) - 1
+        while index < end:
+            character = raw[index]
+            if character != '\\':
+                decoded.append(character)
+                index += 1
+                continue
+            escaped = raw[index + 1]
+            if escaped not in escapes:
+                self.CallError(
+                    f"未対応の文字列エスケープ: \\{escaped}",
+                    _base.ASTNode(token.line, token.column + index, 2),
+                    help=[KinakoHelp('使用できるエスケープは \\"、\\\\、\\n、\\r、\\t です。')],
+                )
+            decoded.append(escapes[escaped])
+            index += 2
+        return "".join(decoded)
     
     def _Program(self) -> _stmt.ProgramStmt:
         stmts: list[_stmt.ClassDeclStmt | _stmt.SpriteDeclStmt] = []
@@ -565,7 +596,12 @@ class Parser():
                 return expr
             case TokenType.STRING:
                 self.advance()
-                return _expr.StringLiteral(current.line, current.column, current.len, current.value)
+                return _expr.StringLiteral(
+                    current.line,
+                    current.column,
+                    current.len,
+                    self.decode_string_literal(current),
+                )
             # ミスケース
             case TokenType.LET:
                 note.append(

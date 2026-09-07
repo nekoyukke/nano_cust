@@ -28,8 +28,12 @@ class Expr_Result():
     stmt: list[Stmt] = field(default_factory=list[Stmt])
 
 
-BOOLEAN_BUILTIN_REPORTERS = {"KeyPressed", "MousePressed"}
-VALUE_BUILTIN_REPORTERS = {"MouseX", "MouseY", "Sin", "Cos", "Tan"}
+BOOLEAN_BUILTIN_REPORTERS = {"KeyPressed", "MousePressed", "Contains"}
+VALUE_BUILTIN_REPORTERS = {
+    "MouseX", "MouseY", "Random", "Join", "LetterOf", "TextLength", "Round",
+    "Abs", "Floor", "Ceil", "Sqrt", "Sin", "Cos", "Tan", "Asin", "Acos",
+    "Atan", "Ln", "Log", "Exp", "Exp10",
+}
 
 class IRGenerator:
     def __init__(self, Program:stmt.ProgramStmt, source:str, ctx:Context) -> None:

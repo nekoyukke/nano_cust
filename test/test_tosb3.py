@@ -217,6 +217,63 @@ class SB3Tests(unittest.TestCase):
             "sin", "cos", "tan",
         })
 
+    def test_remaining_scratch_operator_reporters_lower_to_native_blocks(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let random: int = Random(1, 10);
+                    let text: string = Join("ab", LetterOf(1, "cd"));
+                    let size: int = TextLength(text);
+                    let rounded: int = Round(1.2);
+                    let math: int = Abs(-2) + Floor(1.9) + Ceil(1.1) + Sqrt(4)
+                        + Asin(0) + Acos(1) + Atan(1) + Ln(1) + Log(10) + Exp(1) + Exp10(2);
+                    if Contains(text, "b") { return random + size + rounded + math; }
+                    return 0;
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        blocks = project["targets"][1]["blocks"].values()
+        opcodes = {block["opcode"] for block in blocks}
+        self.assertTrue({
+            "operator_random", "operator_join", "operator_letter_of", "operator_length",
+            "operator_contains", "operator_round", "operator_mathop",
+        }.issubset(opcodes))
+        math_operations = {
+            block["fields"]["OPERATOR"][0]
+            for block in blocks if block["opcode"] == "operator_mathop"
+        }
+        self.assertTrue({
+            "abs", "floor", "ceiling", "sqrt", "asin", "acos", "atan", "ln", "log", "e ^", "10 ^",
+        }.issubset(math_operations))
+
+    def test_string_literals_are_unquoted_and_escaped_in_sb3(self):
+        module = build(r'''
+            sprite Main {
+                fn main() -> int {
+                    let text: string = "日本語\n\"quoted\"\\slash";
+                    return TextLength(text);
+                }
+            }
+        ''')
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        string_values = [
+            block["inputs"]["VALUE"]
+            for block in project["targets"][1]["blocks"].values()
+            if block["opcode"] == "data_setvariableto"
+            and block["inputs"].get("VALUE", [None])[0] == 1
+            and block["inputs"]["VALUE"][1][0] == 10
+        ]
+        self.assertIn([1, [10, '日本語\n"quoted"\\slash']], string_values)
+
     def test_non_returning_statement_sequence_is_not_individually_guarded(self):
         module = build("""
             sprite Main {

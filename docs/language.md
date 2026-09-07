@@ -196,6 +196,18 @@ sprite Main {
 | `Sin(degrees)` | `number` | 指定角度の正弦 |
 | `Cos(degrees)` | `number` | 指定角度の余弦 |
 | `Tan(degrees)` | `number` | 指定角度の正接 |
+| `Asin(value)` / `Acos(value)` / `Atan(value)` | `number` | 逆三角関数（結果は度数法） |
+| `Abs(value)` | `number` | 絶対値 |
+| `Floor(value)` / `Ceil(value)` | `number` | 切り捨て／切り上げ |
+| `Round(value)` | `number` | 四捨五入 |
+| `Sqrt(value)` | `number` | 平方根 |
+| `Ln(value)` / `Log(value)` | `number` | 自然対数／常用対数 |
+| `Exp(value)` / `Exp10(value)` | `number` | `e^value` / `10^value` |
+| `Random(min, max)` | `number, number` | 範囲内の乱数 |
+| `Join(left, right)` | `string, string` | 文字列を連結 |
+| `LetterOf(index, text)` | `number, string` | 指定位置の1文字（Scratchと同じ1始まり） |
+| `TextLength(text)` | `string` | 文字列の長さ |
+| `Contains(text, part)` | `string, string` | 部分文字列を含むか（`boolean`） |
 
 ペン関数を使うと、出力プロジェクトには Pen 拡張が自動的に追加されます。
 
@@ -205,7 +217,7 @@ sprite Main {
 if KeyPressed("ArrowRight") { Move(MouseX(), MouseY()); }
 ```
 
-三角関数の角度はラジアンではなく、Scratchと同じ**度数法**です。例えば `Sin(30)` は `0.5` になります。
+三角関数と逆三角関数の角度はラジアンではなく、Scratchと同じ**度数法**です。例えば `Sin(30)` は `0.5` になります。通常の数値演算は演算子 `+`、`-`、`*`、`/`、`%`、比較は `==`、`!=`、`<`、`<=`、`>`、`>=`、論理演算は `&&`、`||` を使用します。
 
 ## 12. `save` と `unsave`
 
