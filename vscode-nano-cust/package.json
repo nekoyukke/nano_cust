@@ -2,7 +2,8 @@
   "name": "nano-cust",
   "displayName": "nano_cust",
   "description": "Syntax highlighting and editor support for nano_cust source files.",
-  "version": "0.1.0",
+  "version": "0.3.1",
+  "main": "./extension.js",
   "publisher": "nano-cust",
   "engines": {
     "vscode": "^1.85.0"
@@ -10,7 +11,42 @@
   "categories": [
     "Programming Languages"
   ],
+  "activationEvents": [
+    "onLanguage:nano-cust"
+  ],
   "contributes": {
+    "commands": [
+      {
+        "command": "nanoCust.checkSyntax",
+        "title": "nano_cust: 構文・型をチェック"
+      }
+    ],
+    "configuration": {
+      "title": "nano_cust",
+      "properties": {
+        "nanoCust.checkOnChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "編集中の .nc ファイルを自動的にチェックします。"
+        },
+        "nanoCust.checkDelay": {
+          "type": "number",
+          "default": 500,
+          "minimum": 0,
+          "description": "入力後に自動チェックを始めるまでの待機時間（ミリ秒）。"
+        },
+        "nanoCust.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "nano_cust のコンパイルに使用する Python 実行ファイル。"
+        },
+        "nanoCust.compilerPath": {
+          "type": "string",
+          "default": "",
+          "description": "main.py のパス。空欄の場合、ワークスペース直下の main.py を使用します。"
+        }
+      }
+    },
     "languages": [
       {
         "id": "nano-cust",
@@ -21,6 +57,7 @@
         "extensions": [
           ".nc"
         ],
+        "firstLine": "^\\s*(class|sprite)\\s+[A-Za-z_]",
         "configuration": "./language-configuration.json"
       }
     ],

@@ -3,122 +3,56 @@
   "name": "nano_cust",
   "scopeName": "source.nano-cust",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#declarations" },
-    { "include": "#keywords" },
-    { "include": "#types" },
-    { "include": "#builtins" },
-    { "include": "#constants" },
-    { "include": "#operators" },
-    { "include": "#function-calls" }
+    { "include": "#comments" }, { "include": "#strings" }, { "include": "#declarations" },
+    { "include": "#variable-declarations" }, { "include": "#types" }, { "include": "#keywords" },
+    { "include": "#builtins" }, { "include": "#member-access" }, { "include": "#function-calls" },
+    { "include": "#constants" }, { "include": "#numbers" }, { "include": "#operators" },
+    { "include": "#punctuation" }
   ],
   "repository": {
-    "comments": {
-      "patterns": [
-        {
-          "name": "comment.line.double-slash.nano-cust",
-          "match": "//.*$"
-        }
-      ]
-    },
-    "strings": {
-      "patterns": [
-        {
-          "name": "string.quoted.double.nano-cust",
-          "begin": "\"",
-          "end": "\"",
-          "patterns": [
-            {
-              "name": "constant.character.escape.nano-cust",
-              "match": "\\\\."
-            }
-          ]
-        }
-      ]
-    },
-    "numbers": {
-      "patterns": [
-        {
-          "name": "constant.numeric.nano-cust",
-          "match": "(?<![[:alnum:]_])(?:\\d+\\.\\d*|\\.\\d+|\\d+)(?![[:alnum:]_])"
-        }
-      ]
-    },
-    "declarations": {
-      "patterns": [
-        {
-          "match": "\\b(class|sprite)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": { "name": "storage.type.nano-cust" },
-            "2": { "name": "entity.name.type.class.nano-cust" }
-          }
-        },
-        {
-          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": { "name": "storage.type.function.nano-cust" },
-            "2": { "name": "entity.name.function.nano-cust" }
-          }
-        }
-      ]
-    },
-    "keywords": {
-      "patterns": [
-        {
-          "name": "keyword.control.nano-cust",
-          "match": "\\b(if|elif|else|while|for|in|return|new|save|unsave)\\b"
-        },
-        {
-          "name": "storage.modifier.nano-cust",
-          "match": "\\blet\\b"
-        }
-      ]
-    },
-    "types": {
-      "patterns": [
-        {
-          "name": "storage.type.builtin.nano-cust",
-          "match": "\\b(int|number|string|boolean|list)\\b"
-        }
-      ]
-    },
-    "builtins": {
-      "patterns": [
-        {
-          "name": "support.function.builtin.nano-cust",
-          "match": "\\b(Move|MoveSteps|TurnRight|TurnLeft|SetDirection|PenDown|PenUp|PenColor|PenSize|ClearPen)\\b"
-        },
-        {
-          "name": "support.function.collection.nano-cust",
-          "match": "\\b(push|pop|length)\\b(?=\\s*\\()"
-        }
-      ]
-    },
-    "constants": {
-      "patterns": [
-        {
-          "name": "constant.language.nano-cust",
-          "match": "\\b(null|none|true|false)\\b"
-        }
-      ]
-    },
-    "operators": {
-      "patterns": [
-        {
-          "name": "keyword.operator.nano-cust",
-          "match": "->|&&|\\|\\||==|!=|<=|>=|[+*/%<>=!-]"
-        }
-      ]
-    },
-    "function-calls": {
-      "patterns": [
-        {
-          "name": "variable.function.nano-cust",
-          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"
-        }
-      ]
-    }
+    "comments": { "patterns": [{ "name": "comment.line.double-slash.nano-cust", "match": "//.*$" }] },
+    "strings": { "patterns": [{ "name": "string.quoted.double.nano-cust", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.nano-cust", "match": "\\\\(?:[\\\"\\\\nrt]|.)" }] }] },
+    "declarations": { "patterns": [
+      { "match": "\\b(class)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.class.nano-cust" }, "2": { "name": "entity.name.class.nano-cust" } } },
+      { "match": "\\b(sprite)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.sprite.nano-cust" }, "2": { "name": "entity.name.class.nano-cust" } } },
+      { "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()", "captures": { "1": { "name": "keyword.declaration.function.nano-cust" }, "2": { "name": "entity.name.function.nano-cust" }, "3": { "name": "punctuation.definition.parameters.begin.nano-cust" } } },
+      { "match": "(?<=\\(|,)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(?:(int|number|string|boolean|list)\\b|([A-Z][A-Za-z0-9_]*))", "captures": { "1": { "name": "variable.parameter.nano-cust" }, "2": { "name": "punctuation.separator.type.nano-cust" }, "3": { "name": "storage.type.builtin.nano-cust" }, "4": { "name": "entity.name.type.class.nano-cust" } } }
+    ] },
+    "variable-declarations": { "patterns": [{ "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(:)\\s*(?:(int|number|string|boolean|list)\\b|([A-Z][A-Za-z0-9_]*))", "captures": { "1": { "name": "storage.modifier.declaration.nano-cust" }, "2": { "name": "variable.other.definition.nano-cust" }, "3": { "name": "punctuation.separator.type.nano-cust" }, "4": { "name": "storage.type.builtin.nano-cust" }, "5": { "name": "entity.name.type.class.nano-cust" } } }] },
+    "types": { "patterns": [
+      { "name": "storage.type.builtin.nano-cust", "match": "\\b(?:int|number|string|boolean|list)\\b" },
+      { "name": "entity.name.type.class.nano-cust", "match": "(?<=:)\\s*[A-Z][A-Za-z0-9_]*\\b" }
+    ] },
+    "keywords": { "patterns": [
+      { "name": "keyword.control.conditional.nano-cust", "match": "\\b(?:if|elif|else)\\b" },
+      { "name": "keyword.control.loop.nano-cust", "match": "\\b(?:while|for|in)\\b" },
+      { "name": "keyword.control.flow.nano-cust", "match": "\\breturn\\b" },
+      { "name": "keyword.control.object.nano-cust", "match": "\\b(?:new|save|unsave)\\b" },
+      { "name": "keyword.control.import.nano-cust", "match": "\\bimport\\b" }
+    ] },
+    "builtins": { "patterns": [
+      { "name": "support.function.builtin.nano-cust", "match": "\\b(?:Move|MoveSteps|TurnRight|TurnLeft|SetDirection|PenDown|PenUp|PenColor|PenSize|ClearPen)\\b(?=\\s*\\()" },
+      { "name": "support.function.collection.nano-cust", "match": "\\b(?:push|pop|length)\\b(?=\\s*\\()" }
+    ] },
+    "member-access": { "patterns": [
+      { "match": "(\\.)\\s*(push|pop|length)\\b(?=\\s*\\()", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "support.function.collection.nano-cust" } } },
+      { "match": "(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b(?=\\s*\\()", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "entity.name.function.call.nano-cust" } } },
+      { "match": "(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "variable.other.property.nano-cust" } } }
+    ] },
+    "function-calls": { "patterns": [{ "name": "entity.name.function.call.nano-cust", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()" }] },
+    "constants": { "patterns": [{ "name": "constant.language.nano-cust", "match": "\\b(?:null|none|true|false)\\b" }] },
+    "numbers": { "patterns": [{ "name": "constant.numeric.nano-cust", "match": "(?<![A-Za-z0-9_])(?:\\d+\\.\\d+|\\d+)(?![A-Za-z0-9_])" }] },
+    "operators": { "patterns": [
+      { "name": "keyword.operator.logical.nano-cust", "match": "&&|\\|\\|" },
+      { "name": "keyword.operator.comparison.nano-cust", "match": "==|!=|<=|>=|<|>" },
+      { "name": "keyword.operator.assignment.nano-cust", "match": "=" },
+      { "name": "keyword.operator.arithmetic.nano-cust", "match": "(?:->|[+\\-*/%])" }
+    ] },
+    "punctuation": { "patterns": [
+      { "name": "punctuation.section.block.nano-cust", "match": "[{}]" },
+      { "name": "punctuation.section.group.nano-cust", "match": "[()]" },
+      { "name": "punctuation.section.brackets.nano-cust", "match": "[\\[\\]]" },
+      { "name": "punctuation.separator.nano-cust", "match": "[,:;]" }
+    ] }
   }
 }

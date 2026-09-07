@@ -101,6 +101,50 @@ class SB3Tests(unittest.TestCase):
             value[0] for value in main["lists"].values()
         })
 
+    def test_terminal_returns_do_not_create_a_return_flag_runtime(self):
+        module = build("""
+            sprite Main {
+                fn twice(value: int) -> int { return value * 2; }
+                fn main() -> int { return twice(3); }
+            }
+        """)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        main = project["targets"][1]
+        self.assertNotIn("__nc_backend_return_flag__", {
+            value[0] for value in main["variables"].values()
+        })
+        self.assertNotIn("__nc_backend_return_flag_stack__", {
+            value[0] for value in main["lists"].values()
+        })
+
+    def test_local_only_program_has_no_cross_sprite_runtime(self):
+        module = build("""
+            sprite Main {
+                fn helper() -> int { return 1; }
+                fn main() -> int { return helper(); }
+            }
+        """)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        stage = project["targets"][0]
+        main = project["targets"][1]
+        self.assertFalse(stage["variables"])
+        self.assertFalse(stage["lists"])
+        self.assertFalse(stage["broadcasts"])
+        self.assertFalse(any(
+            block["opcode"] == "event_whenbroadcastreceived"
+            for block in main["blocks"].values()
+        ))
+
     def test_motion_and_pen_builtins_lower_to_native_scratch_blocks(self):
         module = build("""
             sprite Main {
@@ -125,6 +169,47 @@ class SB3Tests(unittest.TestCase):
             "pen_setPenSizeTo", "pen_penUp", "pen_clear",
         }.issubset(opcodes))
         self.assertIn("pen", project["extensions"])
+
+    def test_non_returning_statement_sequence_is_not_individually_guarded(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let value: int = 1;
+                    value = value + 1;
+                    return value;
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        opcodes = {
+            block["opcode"] for block in project["targets"][1]["blocks"].values()
+        }
+        self.assertNotIn("control_if", opcodes)
+
+    def test_statements_after_a_possible_return_share_one_guard(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    if 1 == 1 { return 1; }
+                    Move(10, 20);
+                    Move(30, 40);
+                    return 0;
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        blocks = project["targets"][1]["blocks"].values()
+        # One `if` is written in the source, and one additional `if` guards
+        # the complete suffix after its early return.
+        self.assertEqual(sum(block["opcode"] == "control_if" for block in blocks), 2)
 
 
 if __name__ == "__main__":

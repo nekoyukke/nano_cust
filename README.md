@@ -68,13 +68,3 @@ python -m unittest discover -s test -p "test_*.py" -v
 ## ドキュメント
 
 言語の構文、型、Scratch 連携、現在の制約は[言語仕様](docs/language.md)を参照してください。
-
-# syntax 色付け
-
-./vscode-nano-custを開いて次のコマンドを実行してください
-
-```
-npm install --global @vscode/vsce
-vsce package
-code --install-extension nano-cust-0.1.0.vsix
-```

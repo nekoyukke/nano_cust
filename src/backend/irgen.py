@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 _type = type
@@ -38,6 +39,9 @@ class IRGenerator:
         # A class method is emitted once per source sprite because every
         # sprite owns its own Scratch variables and runtime lists.
         self.module_function: dict[tuple[symbol.FunctionSymbol, int], Function] = {}
+        self.function_symbols: dict[Function, symbol.FunctionSymbol] = {}
+        self.recursive_components: dict[symbol.FunctionSymbol, int] = {}
+        self.current_function_symbol: symbol.FunctionSymbol | None = None
         self.sprite_positions: dict[symbol.SpriteSymbol, int] = {}
         # sprite整理
         self.sprite: list[Sprite] = []
@@ -50,6 +54,7 @@ class IRGenerator:
         # counts
         self.count = 0
         self.temp_pos = 0
+        self.temp_floor = 0
         # variable and lists
         self.trash:Variable
         self.current_object: Variable
@@ -87,7 +92,17 @@ class IRGenerator:
 
     def reset_temp(self):
         """tempをリセット（stmt毎を想定）"""
-        self.temp_pos = 0
+        self.temp_pos = self.temp_floor
+
+    @contextmanager
+    def reserve_temps(self):
+        """Keep a parent statement's live temporaries while lowering a body."""
+        old_floor, old_pos = self.temp_floor, self.temp_pos
+        self.temp_floor = self.temp_pos
+        try:
+            yield
+        finally:
+            self.temp_floor, self.temp_pos = old_floor, old_pos
 
     def get_temp(self):
         """あたらしいtempを生成して返す"""
@@ -102,6 +117,7 @@ class IRGenerator:
 
     def visit(self) -> Module:
         "その名の通り。エントリーポイント"
+        self._analyze_recursive_components()
         # Register sprite functions before generating any body.  This lets a
         # sprite call a function owned by a sprite that appears later in the
         # source file; the placeholder is completed when its owner is visited.
@@ -112,11 +128,13 @@ class IRGenerator:
                 self.sprite_positions[sprite_symbol] = sprite_index
                 for function_node in node.functions:
                     if isinstance(function_node.name.sym, symbol.FunctionSymbol):
-                        self.module_function[(function_node.name.sym, sprite_index)] = Function(
+                        function = Function(
                             function_node.name.ident,
                             [],
                             Block([]),
                         )
+                        self.module_function[(function_node.name.sym, sprite_index)] = function
+                        self.function_symbols[function] = function_node.name.sym
                 sprite_index += 1
         for i in self.program.instr:
             if isinstance(i, stmt.SpriteDeclStmt):
@@ -127,6 +145,144 @@ class IRGenerator:
                     self.module.entry_point = function
                     break
         return self.module
+
+    def _function_symbol(self, node: stmt.FunctionDeclStmt) -> symbol.FunctionSymbol:
+        if isinstance(node.name.sym, symbol.MethodSymbol):
+            return node.name.sym.fnc
+        if isinstance(node.name.sym, symbol.FunctionSymbol):
+            return node.name.sym
+        raise ValueError(f"unresolved function declaration: {node.name.ident}")
+
+    def _source_functions(self) -> dict[symbol.FunctionSymbol, stmt.FunctionDeclStmt]:
+        functions: dict[symbol.FunctionSymbol, stmt.FunctionDeclStmt] = {}
+        for node in self.program.instr:
+            if isinstance(node, stmt.ClassDeclStmt):
+                for function in node.method:
+                    functions[self._function_symbol(function)] = function
+            elif isinstance(node, stmt.SpriteDeclStmt):
+                for function in node.functions:
+                    functions[self._function_symbol(function)] = function
+        return functions
+
+    def _called_functions_in_expr(self, node: expr.Expr) -> set[symbol.FunctionSymbol]:
+        called: set[symbol.FunctionSymbol] = set()
+
+        def visit_expr(current: expr.Expr) -> None:
+            match current:
+                case expr.CallExpr():
+                    target = current.call
+                    if isinstance(target, expr.Variable):
+                        if isinstance(target.sym, symbol.FunctionSymbol):
+                            called.add(target.sym)
+                        elif isinstance(target.sym, symbol.MethodSymbol):
+                            called.add(target.sym.fnc)
+                    elif isinstance(target, expr.MemberExpr):
+                        if isinstance(target.member.sym, symbol.FunctionSymbol):
+                            called.add(target.member.sym)
+                        elif isinstance(target.member.sym, symbol.MethodSymbol):
+                            called.add(target.member.sym.fnc)
+                        visit_expr(target.expr)
+                    for argument in current.args:
+                        visit_expr(argument)
+                case expr.BinaryExpr() | expr.LogicExpr() | expr.AssignExpr():
+                    visit_expr(current.left)
+                    visit_expr(current.right)
+                case expr.UnaryExpr():
+                    visit_expr(current.expr)
+                case expr.IndexExpr():
+                    visit_expr(current.expr)
+                    visit_expr(current.index)
+                case expr.MemberExpr():
+                    visit_expr(current.expr)
+
+        visit_expr(node)
+        return called
+
+    def _called_functions_in_stmt(self, node: stmt.Stmt) -> set[symbol.FunctionSymbol]:
+        called: set[symbol.FunctionSymbol] = set()
+
+        def visit_stmt(current: stmt.Stmt) -> None:
+            match current:
+                case stmt.BlockStmt():
+                    for instruction in current.instr:
+                        visit_stmt(instruction)
+                case stmt.VariableDeclStmt():
+                    if current.left:
+                        called.update(self._called_functions_in_expr(current.left))
+                case stmt.ExprStmt() | stmt.ReturnStmt():
+                    called.update(self._called_functions_in_expr(current.expr))
+                case stmt.Ifstmt():
+                    called.update(self._called_functions_in_expr(current.cond))
+                    visit_stmt(current.then_stmt)
+                    if current.else_stmt:
+                        visit_stmt(current.else_stmt)
+                case stmt.WhileStmt():
+                    called.update(self._called_functions_in_expr(current.cond))
+                    visit_stmt(current.loop)
+                case stmt.ForEachStmt():
+                    called.update(self._called_functions_in_expr(current.iterator))
+                    visit_stmt(current.loop)
+                case stmt.SaveNode() | stmt.UnSaveNode():
+                    called.update(self._called_functions_in_expr(current.source))
+
+        visit_stmt(node)
+        return called
+
+    def _analyze_recursive_components(self) -> None:
+        """Find direct and indirect recursion with Tarjan's SCC algorithm."""
+        functions = self._source_functions()
+        graph = {
+            function: self._called_functions_in_stmt(node.body) & functions.keys()
+            for function, node in functions.items()
+        }
+        index = 0
+        stack: list[symbol.FunctionSymbol] = []
+        on_stack: set[symbol.FunctionSymbol] = set()
+        indexes: dict[symbol.FunctionSymbol, int] = {}
+        lowlinks: dict[symbol.FunctionSymbol, int] = {}
+        component_id = 0
+
+        def visit(function: symbol.FunctionSymbol) -> None:
+            nonlocal index, component_id
+            indexes[function] = index
+            lowlinks[function] = index
+            index += 1
+            stack.append(function)
+            on_stack.add(function)
+
+            for callee in graph[function]:
+                if callee not in indexes:
+                    visit(callee)
+                    lowlinks[function] = min(lowlinks[function], lowlinks[callee])
+                elif callee in on_stack:
+                    lowlinks[function] = min(lowlinks[function], indexes[callee])
+
+            if lowlinks[function] != indexes[function]:
+                return
+            component: list[symbol.FunctionSymbol] = []
+            while True:
+                member = stack.pop()
+                on_stack.remove(member)
+                component.append(member)
+                if member is function:
+                    break
+            if len(component) > 1 or function in graph[function]:
+                for member in component:
+                    self.recursive_components[member] = component_id
+                component_id += 1
+
+        for function in graph:
+            if function not in indexes:
+                visit(function)
+
+    def _requires_call_frame(self, callee: Function) -> bool:
+        if self.current_function_symbol is None:
+            return True
+        callee_symbol = self.function_symbols.get(callee)
+        if callee_symbol is None:
+            return True
+        component = self.recursive_components.get(self.current_function_symbol)
+        return component is not None and component == self.recursive_components.get(callee_symbol)
 
     def visit_sprite(self, node:stmt.SpriteDeclStmt):
         """sprite作る"""
@@ -144,7 +300,10 @@ class IRGenerator:
         # これにより再帰・前方参照を直接Function参照として表現できる。
         funcs = [self.declare_function(i) for i in function_nodes]
         for function, function_node in zip(funcs, function_nodes):
+            old_function_symbol = self.current_function_symbol
+            self.current_function_symbol = self._function_symbol(function_node)
             function.instr = self.visit_stmt_entry(function_node.body)
+            self.current_function_symbol = old_function_symbol
         # make_sprite() already registered the real target in module.sprites.
         # Appending a second Sprite here used to discard the runtime lists and
         # leave each source sprite represented twice.
@@ -294,6 +453,7 @@ class IRGenerator:
             function.params = args
             function.instr = Block([])
         self.module_function[function_key] = function
+        self.function_symbols[function] = sym
         return function
 
     def get_function(self, sym: symbol.FunctionSymbol, sprite_pos: int | None = None) -> Function:
@@ -384,6 +544,9 @@ class IRGenerator:
     
     def visit_stmt(self, node:stmt.Stmt) -> list[Stmt]:
         """Stmtを返すvisiter"""
+        # A temporary only needs to survive the source statement that created
+        # it.  Nested bodies retain their enclosing statement's live slots.
+        self.reset_temp()
         # what the fuck!?
         match(node):
             # 宣言系
@@ -411,6 +574,9 @@ class IRGenerator:
 
             # 式・返値系
             case stmt.ExprStmt():
+                if isinstance(node.expr, expr.CallExpr):
+                    left = self.visit_expr(node.expr, discard_result=True)
+                    return left.stmt
                 left = self.visit_expr(node.expr)
                 return [*left.stmt, Move(self.trash, left.exp)] # ごみに捨てる。
 
@@ -423,14 +589,18 @@ class IRGenerator:
                 condition = self.visit_expr(node.cond)
                 if not isinstance(condition.exp, BoolExpr):
                     raise TypeError("if condition must lower to BoolExpr")
-                then_block = self.visit_stmt_entry(node.then_stmt)
-                else_block = self.visit_stmt_entry(node.else_stmt) if node.else_stmt else None
+                with self.reserve_temps():
+                    then_block = self.visit_stmt_entry(node.then_stmt)
+                with self.reserve_temps():
+                    else_block = self.visit_stmt_entry(node.else_stmt) if node.else_stmt else None
                 return [*condition.stmt, Branch(condition.exp, then_block, else_block)]
             case stmt.WhileStmt():
                 condition = self.visit_expr(node.cond)
                 if not isinstance(condition.exp, BoolExpr):
                     raise TypeError("while condition must lower to BoolExpr")
-                return [*condition.stmt, While(condition.exp, self.visit_stmt_entry(node.loop))]
+                with self.reserve_temps():
+                    body = self.visit_stmt_entry(node.loop)
+                return [*condition.stmt, While(condition.exp, body)]
             case stmt.ForEachStmt():
                 # The iteration bound is captured before the first iteration;
                 # appending to the list in the body therefore cannot extend
@@ -449,7 +619,8 @@ class IRGenerator:
                     self.sprite[self.sprite_pos].variables.append(element)
                 index = self.get_temp()
                 bound = self.get_temp()
-                body = self.visit_stmt_entry(node.loop)
+                with self.reserve_temps():
+                    body = self.visit_stmt_entry(node.loop)
                 body.instr = [
                     Move(element, ListGet(list_id, VariableExpr(index))),
                     *body.instr,
@@ -488,7 +659,7 @@ class IRGenerator:
             case _:
                 raise ValueError(f"Unknown statement node: {_type(node).__name__}")
 
-    def visit_expr(self, node:expr.Expr) -> Expr_Result:
+    def visit_expr(self, node:expr.Expr, *, discard_result: bool = False) -> Expr_Result:
         """exprを返す関数。"""
         match node:
             # 二項演算・単項演算・論理・代入
@@ -567,13 +738,17 @@ class IRGenerator:
                 if isinstance(node.call, expr.Variable):
                     if isinstance(node.call.sym, symbol.FunctionSymbol):
                         transfers = self.list_argument_transfers(node.call.sym, node.args)
-                        return self.emit_call(self.get_function(node.call.sym), values, preceding, list_transfers=transfers)
+                        return self.emit_call(
+                            self.get_function(node.call.sym), values, preceding,
+                            list_transfers=transfers, capture_result=not discard_result,
+                        )
                     if isinstance(node.call.sym, symbol.MethodSymbol):
                         return self.emit_call(
                             self.get_function(node.call.sym.fnc),
                             values,
                             preceding,
                             VariableExpr(self.current_object),
+                            capture_result=not discard_result,
                         )
                     raise NotImplementedError("unsupported call target")
                 if isinstance(node.call, expr.MemberExpr) and isinstance(node.call.member.sym, symbol.FunctionSymbol):
@@ -584,6 +759,7 @@ class IRGenerator:
                         self.get_function(node.call.member.sym, target_sprite),
                         values,
                         preceding,
+                        capture_result=not discard_result,
                     )
                 if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop", "length"}:
                     if not isinstance(node.call.expr, expr.Variable) or not node.call.expr.sym:
@@ -604,6 +780,8 @@ class IRGenerator:
                         return Expr_Result(ListLength(list_id), preceding)
                     if values:
                         raise ValueError("list.pop takes no arguments")
+                    if discard_result:
+                        return Expr_Result(ImmExpr(Number(0)), [*preceding, ListPop(list_id)])
                     result = self.get_temp()
                     return Expr_Result(
                         VariableExpr(result),
@@ -625,6 +803,7 @@ class IRGenerator:
                         [*receiver.stmt, *preceding],
                         receiver.exp,
                         transfers,
+                        capture_result=not discard_result,
                     )
                 raise NotImplementedError("unsupported call target")
             
@@ -701,6 +880,7 @@ class IRGenerator:
         preceding: list[Stmt],
         receiver: Expr | None = None,
         list_transfers: list[tuple[ListInfo, ListInfo]] | None = None,
+        capture_result: bool = True,
     ) -> Expr_Result:
         """Emit a call frame and materialize its result in a temporary.
 
@@ -708,16 +888,18 @@ class IRGenerator:
         the caller's return-value cell.  The pair is restored in reverse order
         after the callee has produced its result.
         """
-        result = self.get_temp()
+        result = self.get_temp() if capture_result else None
         top = lambda: ListLength(self.return_stack)
         target = receiver or VariableExpr(self.current_object)
         # Scratch variables are sprite-wide.  Save the caller's scalar locals
         # and temporaries so recursive/re-entrant calls cannot overwrite them.
-        protected = {id(self.trash), id(self.current_object), id(self.return_value), id(result)}
+        protected = {id(self.trash), id(self.current_object), id(self.return_value)}
+        if result is not None:
+            protected.add(id(result))
         frame_variables = [
             variable for variable in self.sprite[self.sprite_pos].variables
             if id(variable) not in protected
-        ]
+        ] if self._requires_call_frame(callee) else []
         list_transfers = list_transfers or []
         copy_in = [instruction for source, destination in list_transfers for instruction in self.copy_list(source, destination)]
         copy_out = [instruction for source, destination in list_transfers for instruction in self.copy_list(destination, source)]
@@ -729,7 +911,7 @@ class IRGenerator:
             ListPush(self.return_stack, VariableExpr(self.return_value)),
             Move(self.current_object, target),
             Call(callee, params),
-            Move(result, VariableExpr(self.return_value)),
+            *([Move(result, VariableExpr(self.return_value))] if result is not None else []),
             *[
                 instruction
                 for variable in reversed(frame_variables)
@@ -744,7 +926,10 @@ class IRGenerator:
             ListDelete(self.return_stack, top()),
             *copy_out,
         ]
-        return Expr_Result(VariableExpr(result), instructions)
+        return Expr_Result(
+            VariableExpr(result) if result is not None else ImmExpr(Number(0)),
+            instructions,
+        )
 
     def list_argument_transfers(self, callee: symbol.FunctionSymbol, arguments: list[expr.Expr]) -> list[tuple[ListInfo, ListInfo]]:
         transfers: list[tuple[ListInfo, ListInfo]] = []

@@ -147,6 +147,38 @@ class IRGeneratorFeatureTests(unittest.TestCase):
         self.assertGreaterEqual(sum(isinstance(item, ListPush) for item in recursive_instructions), 2)
         self.assertGreaterEqual(sum(isinstance(item, ListDelete) for item in recursive_instructions), 2)
 
+    def test_indirect_recursion_keeps_frames_only_inside_its_scc(self):
+        module = build("""
+            sprite Main {
+                fn a(n: int) -> int {
+                    if n == 0 { return 0; }
+                    return b(n - 1);
+                }
+                fn b(n: int) -> int { return c(n); }
+                fn c(n: int) -> int { return a(n); }
+                fn main() -> int { return a(1); }
+            }
+        """)
+
+        def has_frame_push(instructions):
+            for instruction in instructions:
+                if isinstance(instruction, ListPush) and instruction.list_id.list_name.endswith("__Frame__"):
+                    return True
+                if isinstance(instruction, Branch):
+                    if has_frame_push(instruction.true_label.instr):
+                        return True
+                    if instruction.false_label and has_frame_push(instruction.false_label.instr):
+                        return True
+                if isinstance(instruction, While) and has_frame_push(instruction.body.instr):
+                    return True
+            return False
+
+        functions = {function.name: function for function in module.sprites[0].func}
+        self.assertTrue(has_frame_push(functions["a"].instr.instr))
+        self.assertTrue(has_frame_push(functions["b"].instr.instr))
+        self.assertTrue(has_frame_push(functions["c"].instr.instr))
+        self.assertFalse(has_frame_push(functions["main"].instr.instr))
+
     def test_save_removes_and_unsave_restores_an_object_registration(self):
         module = build("""
             class Box { let value: int; }
@@ -162,6 +194,39 @@ class IRGeneratorFeatureTests(unittest.TestCase):
         instructions = module.sprites[0].func[-1].instr.instr
         self.assertTrue(any(isinstance(item, While) for item in instructions))
         self.assertTrue(any(isinstance(item, ListPush) for item in instructions))
+
+    def test_discarded_call_does_not_allocate_a_return_temporary(self):
+        module = build("""
+            sprite Main {
+                fn side_effect() -> int { return 0; }
+                fn main() -> int {
+                    side_effect();
+                    return 0;
+                }
+            }
+        """)
+        self.assertFalse(any(
+            variable.name.startswith("__nc_runtime__.temp")
+            for variable in module.sprites[0].variables
+        ))
+
+    def test_temporaries_are_reused_between_source_statements(self):
+        module = build("""
+            sprite Main {
+                fn inc(value: int) -> int { return value + 1; }
+                fn main() -> int {
+                    let first: int = inc(1);
+                    let second: int = inc(2);
+                    return first + second;
+                }
+            }
+        """)
+
+        temporaries = [
+            variable for variable in module.sprites[0].variables
+            if variable.name.startswith("__nc_runtime__.temp")
+        ]
+        self.assertEqual(len(temporaries), 1)
 
 
 if __name__ == "__main__":

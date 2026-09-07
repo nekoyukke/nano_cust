@@ -81,12 +81,29 @@ class SB3Emitter:
         self.broadcast_ids: dict[str, str] = {}
         self.uses_pen = False
 
-        max_args = 0
         for sprite_index, sprite in enumerate(self.sprites):
             for function in sprite.func:
                 self.function_owner[function] = sprite_index
-                max_args = max(max_args, len(function.params))
-        for name in ([] if self.flattened else ["__nc_cross_return_value__", *[
+
+        self.functions_requiring_return_flag = {
+            function
+            for sprite in self.sprites
+            for function in sprite.func
+            if self.function_requires_return_flag(function)
+        }
+        self.sprites_requiring_return_flag = {
+            index
+            for index, sprite in enumerate(self.sprites)
+            if any(function in self.functions_requiring_return_flag for function in sprite.func)
+        }
+        self.cross_sprite_functions = self.find_cross_sprite_functions()
+
+        max_args = 0
+        for sprite_index, sprite in enumerate(self.sprites):
+            for function in sprite.func:
+                if function in self.cross_sprite_functions:
+                    max_args = max(max_args, len(function.params))
+        for name in ([] if self.flattened or not self.cross_sprite_functions else ["__nc_cross_return_value__", *[
             f"__nc_cross_arg_{index}__" for index in range(max_args)
         ]]):
             self.global_variables[name] = self.new_id("g")
@@ -94,12 +111,12 @@ class SB3Emitter:
         # argument and result cells above are therefore a calling convention,
         # not permanent storage: save their old values before each call and
         # restore them afterwards.
-        for name in ([] if self.flattened else ["__nc_cross_return_stack__", *[
+        for name in ([] if self.flattened or not self.cross_sprite_functions else ["__nc_cross_return_stack__", *[
             f"__nc_cross_arg_{index}_stack__" for index in range(max_args)
         ]]):
             self.global_lists[name] = self.new_id("gl")
         for function, sprite_index in self.function_owner.items():
-            if self.flattened:
+            if self.flattened or function not in self.cross_sprite_functions:
                 continue
             message = f"__nc_call_{sprite_index}_{function.name}__"
             identifier = self.new_id("broadcast")
@@ -107,6 +124,43 @@ class SB3Emitter:
             # while blocks refer to them as [display-name, broadcast-id].
             self.broadcasts[identifier] = message
             self.broadcast_ids[message] = identifier
+
+    def find_cross_sprite_functions(self) -> set[Function]:
+        """Return only functions that are actually reached from another sprite."""
+        cross_sprite_functions: set[Function] = set()
+
+        def visit_block(block: Block, owner: int) -> None:
+            for instruction in block.instr:
+                if isinstance(instruction, Call):
+                    if self.function_owner[instruction.callee] != owner:
+                        cross_sprite_functions.add(instruction.callee)
+                elif isinstance(instruction, Branch):
+                    visit_block(instruction.true_label, owner)
+                    if instruction.false_label is not None:
+                        visit_block(instruction.false_label, owner)
+                elif isinstance(instruction, While):
+                    visit_block(instruction.body, owner)
+
+        for function, owner in self.function_owner.items():
+            visit_block(function.instr, owner)
+        return cross_sprite_functions
+
+    def function_requires_return_flag(self, function: Function) -> bool:
+        """Whether this function needs a runtime flag to implement early return."""
+        return self.block_requires_return_flag(function.instr)
+
+    def block_requires_return_flag(self, block: Block) -> bool:
+        for index, statement in enumerate(block.instr):
+            if isinstance(statement, While) and self.block_may_return(statement.body):
+                return True
+            if isinstance(statement, Branch):
+                if self.block_requires_return_flag(statement.true_label):
+                    return True
+                if statement.false_label and self.block_requires_return_flag(statement.false_label):
+                    return True
+            if self.statement_may_return(statement) and index + 1 < len(block.instr):
+                return True
+        return False
 
     def default_costume(self, name: str) -> dict[str, Any]:
         svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1"></svg>'
@@ -309,7 +363,7 @@ class SB3Emitter:
         }
         for argument_id, value in zip(argument_ids, values):
             self.reporter_input(block_id, argument_id, value)
-        if not manage_return_flag:
+        if not manage_return_flag or callee not in self.functions_requiring_return_flag:
             return block_id
         if self.return_flag_id is None or self.return_flag_stack_id is None:
             raise RuntimeError("procedure call outside a sprite target")
@@ -485,15 +539,16 @@ class SB3Emitter:
                 hat,
             ),
             self.runtime_list_pop(self.current_return_stack, hat),
-            # A foreign call is only emitted from an active statement.  Once
-            # its handler has restored the suspended frame, its caller must be
-            # runnable again even when this target was re-entered by a nested
-            # broadcast.
-            self.set_internal_variable(
+        ]
+        # A foreign call is only emitted from an active statement.  Once its
+        # handler has restored the suspended frame, its caller must be
+        # runnable again even when this target was re-entered by a nested
+        # broadcast.  Terminal-return-only targets have no such flag.
+        if self.return_flag_id is not None:
+            sequence.append(self.set_internal_variable(
                 "__nc_backend_return_flag__", self.return_flag_id,
                 self.primitive(Number(0)), hat,
-            ),
-        ]
+            ))
         first: str | None = None
         previous: str | None = None
         for block_id in sequence:
@@ -572,7 +627,12 @@ class SB3Emitter:
         if isinstance(statement, While):
             block_id = self.block("control_repeat_until", parent=parent)
             not_active = self.block("operator_not")
-            self.reporter_input(not_active, "OPERAND", self.active_condition_reporter(statement.cond))
+            condition = (
+                self.active_condition_reporter(statement.cond)
+                if self.current_function in self.functions_requiring_return_flag
+                else self.expr(statement.cond)
+            )
+            self.reporter_input(not_active, "OPERAND", condition)
             self.reporter_input(block_id, "CONDITION", not_active)
             self.attach_substack(block_id, "SUBSTACK", statement.body)
             return block_id
@@ -596,6 +656,8 @@ class SB3Emitter:
         if isinstance(statement, Return):
             # The return value has already been stored in __ReturnValue__ by
             # IRGen.  Stop following statements through the per-call flag.
+            if self.current_function not in self.functions_requiring_return_flag:
+                return None
             assert self.return_flag_id is not None
             return self.set_internal_variable(
                 "__nc_backend_return_flag__", self.return_flag_id,
@@ -627,20 +689,68 @@ class SB3Emitter:
             current = self.blocks[current]["next"]
         return guard
 
+    def statement_may_return(self, statement: Stmt) -> bool:
+        """Whether executing this statement can set the current return flag."""
+        if isinstance(statement, Return):
+            return True
+        if isinstance(statement, Branch):
+            return (
+                self.block_may_return(statement.true_label)
+                or (statement.false_label is not None and self.block_may_return(statement.false_label))
+            )
+        if isinstance(statement, While):
+            return self.block_may_return(statement.body)
+        # Calls restore the caller's flag before control returns, so they do
+        # not require a guard around the following statement.
+        return False
+
+    def block_may_return(self, block: Block) -> bool:
+        return any(self.statement_may_return(statement) for statement in block.instr)
+
     def emit_statements(self, statements: list[Stmt], parent: str | None) -> str | None:
         first: str | None = None
         previous: str | None = None
-        for statement in statements:
-            block_id = self.emit_statement(statement, parent)
-            if block_id is None:
-                continue
-            block_id = self.guard_active(block_id, parent)
+        segment_first: str | None = None
+        segment_previous: str | None = None
+        guard_segment = False
+
+        def flush_segment() -> None:
+            nonlocal first, previous, segment_first, segment_previous
+            if segment_first is None or segment_previous is None:
+                return
+            block_id = (
+                self.guard_active(segment_first, parent)
+                if guard_segment and self.current_function in self.functions_requiring_return_flag
+                else segment_first
+            )
             if first is None:
                 first = block_id
             if previous is not None:
                 self.blocks[previous]["next"] = block_id
                 self.blocks[block_id]["parent"] = parent
             previous = self.tail(block_id)
+            segment_first = None
+            segment_previous = None
+
+        for statement in statements:
+            block_id = self.emit_statement(statement, parent)
+            if block_id is None:
+                continue
+            if segment_first is None:
+                segment_first = block_id
+            elif segment_previous is not None:
+                self.blocks[segment_previous]["next"] = block_id
+                self.blocks[block_id]["parent"] = parent
+            segment_previous = self.tail(block_id)
+
+            # Statements through the first possible return may run without a
+            # guard.  Everything after it is grouped into one guarded segment
+            # until the next possible return, preserving early-return behavior
+            # without wrapping every individual Scratch block.
+            if self.statement_may_return(statement):
+                flush_segment()
+                guard_segment = True
+        flush_segment()
         return first
 
     def register_procedures(self, sprite: Sprite) -> None:
@@ -679,8 +789,9 @@ class SB3Emitter:
         self.current_sprite_index = layer_order - 1
         self.variable_ids = {id(variable): self.new_id("v") for variable in sprite.variables}
         self.list_ids = {id(list_info): self.new_id("l") for list_info in sprite.lists}
-        self.return_flag_id = self.new_id("v")
-        self.return_flag_stack_id = self.new_id("l")
+        sprite_requires_return_flag = self.current_sprite_index in self.sprites_requiring_return_flag
+        self.return_flag_id = self.new_id("v") if sprite_requires_return_flag else None
+        self.return_flag_stack_id = self.new_id("l") if sprite_requires_return_flag else None
         self.current_return_value = next(
             (variable for variable in sprite.variables if variable.name.endswith("__ReturnValue__")),
             None,
@@ -698,29 +809,36 @@ class SB3Emitter:
             self.emit_function(function)
         if not self.flattened:
             for function in sprite.func:
-                self.emit_cross_sprite_handler(function)
+                if function in self.cross_sprite_functions:
+                    self.emit_cross_sprite_handler(function)
 
         if self.module.entry_point in sprite.func:
             hat = self.block("event_whenflagclicked", top=True)
-            clear = self.set_internal_variable(
-                "__nc_backend_return_flag__", self.return_flag_id,
-                self.primitive(Number(0)), hat,
-            )
             entry_call = self.procedure_call_inputs(
                 self.module.entry_point, [], hat, manage_return_flag=False
             )
-            self.blocks[hat]["next"] = clear
-            self.blocks[clear]["next"] = entry_call
+            if self.module.entry_point in self.functions_requiring_return_flag:
+                assert self.return_flag_id is not None
+                clear = self.set_internal_variable(
+                    "__nc_backend_return_flag__", self.return_flag_id,
+                    self.primitive(Number(0)), hat,
+                )
+                self.blocks[hat]["next"] = clear
+                self.blocks[clear]["next"] = entry_call
+            else:
+                self.blocks[hat]["next"] = entry_call
 
         return {
             "isStage": False, "name": sprite.name,
             "variables": {
                 **{self.variable_id(variable): [variable.name, 0] for variable in sprite.variables},
-                self.return_flag_id: ["__nc_backend_return_flag__", 0],
+                **({self.return_flag_id: ["__nc_backend_return_flag__", 0]}
+                   if self.return_flag_id is not None else {}),
             },
             "lists": {
                 **{self.list_id(list_info): [list_info.list_name, []] for list_info in sprite.lists},
-                self.return_flag_stack_id: ["__nc_backend_return_flag_stack__", []],
+                **({self.return_flag_stack_id: ["__nc_backend_return_flag_stack__", []]}
+                   if self.return_flag_stack_id is not None else {}),
             },
             "broadcasts": {}, "blocks": self.blocks, "comments": {}, "currentCostume": 0,
             "costumes": [self.default_costume("costume1")], "sounds": [], "volume": 100, "layerOrder": layer_order,
