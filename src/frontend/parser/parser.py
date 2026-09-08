@@ -156,6 +156,12 @@ class Parser():
                         "トップレベルにfnは書けません。Sprite内で定義してください",
                         _base.ASTNode(token.line, token.column, token.len)
                     )
+                case TokenType.AT:
+                    token = self.peek()
+                    self.CallError(
+                        f"予期しない文字: {token.value!r}",
+                        _base.ASTNode(token.line, token.column, token.len),
+                    )
                 case _:
                     token = self.peek()
                     self.CallError(
@@ -234,7 +240,7 @@ class Parser():
             match(self.peek().type):
                 case TokenType.LET:
                     classes.member += [self.let_node()]
-                case TokenType.FN:
+                case TokenType.FN | TokenType.AT:
                     classes.method += [self.fndefine_node()]
                 case _:
                     self.CallError("不明な呼び出し",classes)
@@ -249,7 +255,7 @@ class Parser():
         while not self.check(TokenType.RBRACE):
             if self.is_at_end():
                 self.CallError("Sprite body is not closed", _expr.Variable(name.line, name.column, name.len, name.value))
-            if not self.check(TokenType.FN):
+            if not (self.check(TokenType.FN) or self.check(TokenType.AT)):
                 self.CallError("Sprite body may only contain function declarations", _expr.Variable(sprite_token.line, sprite_token.column, sprite_token.len, sprite_token.value))
             functions.append(self.fndefine_node())
         self.consume(TokenType.RBRACE, "Sprite body must end with '}'")
@@ -343,7 +349,14 @@ class Parser():
         )
         
     def fndefine_node(self):
+        annotations: list[str] = []
+        while self.check(TokenType.AT):
+            self.advance()
+            annotation = self.consume(TokenType.ID, "@ の後にはアノテーション名が必要です")
+            annotations.append(annotation.value)
         define_token = self.advance()
+        if define_token.type != TokenType.FN:
+            self.CallError("アノテーションは fn の直前に置いてください", _base.ASTNode(define_token.line, define_token.column, define_token.len))
         id_token = self.consume(TokenType.ID, "識別子がありません。")
         self.consume(TokenType.LPAREN, "かっこ '(' がありません")
         args:list[_base.Parameter] = []
@@ -374,6 +387,7 @@ class Parser():
                 contract,
                 args,
                 body,
+                annotations=annotations,
             )
     
     def block_node(self):
@@ -505,7 +519,11 @@ class Parser():
         if self.match(TokenType.NEW):
             types = self.get_type("ヒープに設置する不明な型", True)
             return _expr.NewExpr(tok.line, tok.column, tok.len, types)
-        return self.assignment()
+        value = self.assignment()
+        if self.match(TokenType.DOUBLE_DOT):
+            end = self.assignment()
+            return _expr.RangeExpr(value.line, value.col, value.len, value, end)
+        return value
     
     def assignment(self) -> _expr.Expr:
         return self.right_binary_op(self.logical_or, 

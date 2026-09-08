@@ -21,6 +21,7 @@ class TokenType(Enum):
     LOGIC_OR = r'\|\|'
     LOGIC_AND = r'&&'
     ADDR = r'&'
+    AT = r'@'
 
     ASSIGN = r'='
     AS = r'as\b'

@@ -74,6 +74,12 @@ class AssignExpr(Expr):
     op: AssignKind
 
 @dataclass(repr=False)
+class RangeExpr(Expr):
+    """A half-open numeric range: start..end."""
+    start: Expr
+    end: Expr
+
+@dataclass(repr=False)
 class AccessExpr(Expr, ABC):
     pass
 

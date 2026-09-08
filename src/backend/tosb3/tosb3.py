@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from dataclasses import fields, is_dataclass
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -85,11 +86,14 @@ class SB3Emitter:
             for function in sprite.func:
                 self.function_owner[function] = sprite_index
 
+        self.live_functions = self.find_live_functions()
+        self.remove_dead_literal_assignments()
+
         self.functions_requiring_return_flag = {
             function
             for sprite in self.sprites
             for function in sprite.func
-            if self.function_requires_return_flag(function)
+            if function in self.live_functions and self.function_requires_return_flag(function)
         }
         self.sprites_requiring_return_flag = {
             index
@@ -142,8 +146,94 @@ class SB3Emitter:
                     visit_block(instruction.body, owner)
 
         for function, owner in self.function_owner.items():
+            if function not in self.live_functions:
+                continue
             visit_block(function.instr, owner)
         return cross_sprite_functions
+
+    def find_live_functions(self) -> set[Function]:
+        """Mark functions reachable from Main.main through IR Call edges."""
+        if self.module.entry_point is None:
+            return set()
+        live = {self.module.entry_point}
+        pending = [self.module.entry_point]
+
+        def called_by(block: Block) -> list[Function]:
+            callees: list[Function] = []
+            for instruction in block.instr:
+                if isinstance(instruction, Call):
+                    callees.append(instruction.callee)
+                elif isinstance(instruction, Branch):
+                    callees.extend(called_by(instruction.true_label))
+                    if instruction.false_label is not None:
+                        callees.extend(called_by(instruction.false_label))
+                elif isinstance(instruction, While):
+                    callees.extend(called_by(instruction.body))
+            return callees
+
+        while pending:
+            function = pending.pop()
+            for callee in called_by(function.instr):
+                if callee not in live:
+                    live.add(callee)
+                    pending.append(callee)
+        return live
+
+    def remove_dead_literal_assignments(self) -> None:
+        """Drop stores to variables that are never read and have no effects."""
+        reads: set[int] = set()
+
+        def read_expr(value: Any) -> None:
+            if isinstance(value, VariableExpr):
+                reads.add(id(value.value))
+                return
+            if is_dataclass(value):
+                for field in fields(value):
+                    read_expr(getattr(value, field.name))
+            elif isinstance(value, list):
+                for item in value:
+                    read_expr(item)
+
+        def collect(block: Block) -> None:
+            for instruction in block.instr:
+                if isinstance(instruction, Move):
+                    read_expr(instruction.value)
+                elif isinstance(instruction, (ListSet, ListInsert, ListPush)):
+                    read_expr(instruction.index if hasattr(instruction, "index") else instruction.value)
+                    if hasattr(instruction, "value"):
+                        read_expr(instruction.value)
+                elif isinstance(instruction, Branch):
+                    read_expr(instruction.cond); collect(instruction.true_label)
+                    if instruction.false_label is not None: collect(instruction.false_label)
+                elif isinstance(instruction, While):
+                    read_expr(instruction.cond); collect(instruction.body)
+                elif isinstance(instruction, Return) and instruction.value is not None:
+                    read_expr(instruction.value)
+                elif isinstance(instruction, Call):
+                    for parameter in instruction.params: read_expr(parameter)
+
+        for function in self.live_functions:
+            collect(function.instr)
+
+        def prune(block: Block) -> None:
+            kept: list[Stmt] = []
+            for instruction in block.instr:
+                if isinstance(instruction, Branch):
+                    prune(instruction.true_label)
+                    if instruction.false_label is not None: prune(instruction.false_label)
+                elif isinstance(instruction, While):
+                    prune(instruction.body)
+                if (
+                    isinstance(instruction, Move)
+                    and id(instruction.result) not in reads
+                    and isinstance(instruction.value, ImmExpr)
+                ):
+                    continue
+                kept.append(instruction)
+            block.instr = kept
+
+        for function in self.live_functions:
+            prune(function.instr)
 
     def function_requires_return_flag(self, function: Function) -> bool:
         """Whether this function needs a runtime flag to implement early return."""
@@ -312,6 +402,7 @@ class SB3Emitter:
                 "TextLength": ("operator_length", ("STRING",)),
                 "Contains": ("operator_contains", ("STRING1", "STRING2")),
                 "Round": ("operator_round", ("NUM",)),
+                "Timer": ("sensing_timer", ()),
             }
             math_operations = {
                 "Abs": "abs", "Floor": "floor", "Ceil": "ceiling", "Sqrt": "sqrt",
@@ -386,6 +477,33 @@ class SB3Emitter:
 
     def procedure_call(self, call: Call, parent: str | None) -> str:
         return self.procedure_call_inputs(call.callee, [self.expr(value) for value in call.params], parent)
+
+    def can_inline(self, function: Function) -> bool:
+        """Inline only straight-line, terminal-return functions safely."""
+        return (
+            bool({"inline", "consteval"} & function.annotations)
+            and self.function_owner[function] == self.current_sprite_index
+            and bool(function.instr.instr)
+            and isinstance(function.instr.instr[-1], Return)
+            and not any(isinstance(statement, (Branch, While)) for statement in function.instr.instr)
+        )
+
+    def inline_call(self, call: Call, parent: str | None) -> str:
+        """Expand a compact @inline function at its call site."""
+        first: str | None = None
+        previous: str | None = None
+        for parameter, value in zip(call.callee.params, call.params):
+            assignment = self.emit_statement(Move(parameter, value), parent)
+            assert assignment is not None
+            first, previous = self.link(first, previous, assignment)
+        body = self.emit_statements(call.callee.instr.instr[:-1], parent)
+        if body is not None:
+            first, previous = self.link(first, previous, body)
+        if first is None:
+            # A zero-argument `return` function still has the Move that
+            # materializes its result, therefore this is defensive only.
+            raise RuntimeError("inline call produced no blocks")
+        return first
 
     def procedure_call_inputs(self, callee: Function, values: list[str | list[Any]], parent: str | None, *, manage_return_flag: bool = True) -> str:
         procedure = self.procedures[callee]
@@ -603,6 +721,20 @@ class SB3Emitter:
                 "PenColor": ("pen_setPenColorToColor", ("COLOR",)),
                 "PenSize": ("pen_setPenSizeTo", ("SIZE",)),
                 "ClearPen": ("pen_clear", ()),
+                "Wait": ("control_wait", ("DURATION",)),
+                "Say": ("looks_say", ("MESSAGE",)),
+                "SayFor": ("looks_sayforsecs", ("MESSAGE", "SECS")),
+                "Think": ("looks_think", ("MESSAGE",)),
+                "ThinkFor": ("looks_thinkforsecs", ("MESSAGE", "SECS")),
+                "Show": ("looks_show", ()), "Hide": ("looks_hide", ()),
+                "NextCostume": ("looks_nextcostume", ()),
+                "SetSize": ("looks_setsizeto", ("SIZE",)),
+                "ChangeSize": ("looks_changesizeby", ("CHANGE",)),
+                "ClearEffects": ("looks_cleargraphiceffects", ()),
+                "SetX": ("motion_setx", ("X",)), "SetY": ("motion_sety", ("Y",)),
+                "ChangeX": ("motion_changexby", ("DX",)), "ChangeY": ("motion_changeyby", ("DY",)),
+                "GlideTo": ("motion_glidesecstoxy", ("SECS", "X", "Y")),
+                "ResetTimer": ("sensing_resettimer", ()),
             }
             try:
                 opcode, inputs = opcodes[statement.name]
@@ -673,7 +805,7 @@ class SB3Emitter:
         if isinstance(statement, Call):
             if self.function_owner[statement.callee] != self.current_sprite_index:
                 return self.cross_sprite_call(statement, parent)
-            call = self.procedure_call(statement, parent)
+            call = self.inline_call(statement, parent) if self.can_inline(statement.callee) else self.procedure_call(statement, parent)
             if self.flattened:
                 assert self.current_function is not None
                 caller_return = self.function_return_values[self.current_function]
@@ -789,6 +921,8 @@ class SB3Emitter:
 
     def register_procedures(self, sprite: Sprite) -> None:
         for function in sprite.func:
+            if function not in self.live_functions:
+                continue
             names = [parameter.name for parameter in function.params]
             argument_ids = [self.new_id("arg") for _ in function.params]
             suffix = "" if not names else " " + " ".join("%s" for _ in names)
@@ -840,6 +974,8 @@ class SB3Emitter:
         )
         self.register_procedures(sprite)
         for function in sprite.func:
+            if function not in self.live_functions:
+                continue
             self.emit_function(function)
         if not self.flattened:
             for function in sprite.func:
@@ -862,17 +998,37 @@ class SB3Emitter:
             else:
                 self.blocks[hat]["next"] = entry_call
 
+        used_variable_ids = {
+            field[1]
+            for block in self.blocks.values()
+            for field_name, field in block["fields"].items()
+            if field_name == "VARIABLE" and len(field) > 1
+        }
+        used_list_ids = {
+            field[1]
+            for block in self.blocks.values()
+            for field_name, field in block["fields"].items()
+            if field_name == "LIST" and len(field) > 1
+        }
         return {
             "isStage": False, "name": sprite.name,
             "variables": {
-                **{self.variable_id(variable): [variable.name, 0] for variable in sprite.variables},
+                **{
+                    self.variable_id(variable): [variable.name, 0]
+                    for variable in sprite.variables
+                    if self.variable_id(variable) in used_variable_ids
+                },
                 **({self.return_flag_id: ["__nc_backend_return_flag__", 0]}
-                   if self.return_flag_id is not None else {}),
+                   if self.return_flag_id in used_variable_ids else {}),
             },
             "lists": {
-                **{self.list_id(list_info): [list_info.list_name, []] for list_info in sprite.lists},
+                **{
+                    self.list_id(list_info): [list_info.list_name, []]
+                    for list_info in sprite.lists
+                    if self.list_id(list_info) in used_list_ids
+                },
                 **({self.return_flag_stack_id: ["__nc_backend_return_flag_stack__", []]}
-                   if self.return_flag_stack_id is not None else {}),
+                   if self.return_flag_stack_id in used_list_ids else {}),
             },
             "broadcasts": {}, "blocks": self.blocks, "comments": {}, "currentCostume": 0,
             "costumes": [self.default_costume("costume1")], "sounds": [], "volume": 100, "layerOrder": layer_order,

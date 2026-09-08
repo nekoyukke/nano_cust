@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC
 
 from src.frontend.ast.base import ASTNode, TypeDef, Parameter
@@ -27,6 +27,7 @@ class FunctionDeclStmt(Stmt):
     params: list[Parameter]
     body: Stmt
     tp: Type|None=None
+    annotations: list[str] = field(default_factory=list)
 
 
 @dataclass(repr=False)

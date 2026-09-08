@@ -265,6 +265,18 @@ class IRGeneratorFeatureTests(unittest.TestCase):
         ]
         self.assertEqual(len(temporaries), 1)
 
+    def test_numeric_range_lowers_to_a_counter_loop_without_a_list(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    for i in 1..10 { Move(i, 0); }
+                    return 0;
+                }
+            }
+        """)
+        instructions = module.sprites[0].func[0].instr.instr
+        self.assertTrue(any(isinstance(instruction, While) for instruction in instructions))
+
 
 if __name__ == "__main__":
     unittest.main()

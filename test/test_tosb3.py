@@ -274,6 +274,80 @@ class SB3Tests(unittest.TestCase):
         ]
         self.assertIn([1, [10, '日本語\n"quoted"\\slash']], string_values)
 
+    def test_inline_annotation_expands_a_straight_line_function_call(self):
+        module = build("""
+            sprite Main {
+                @inline
+                fn twice(value: int) -> int { return value * 2; }
+                fn main() -> int { return twice(3); }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        blocks = project["targets"][1]["blocks"].values()
+        # Only the green-flag entry invokes a custom block; `twice` itself is
+        # expanded in `main`.
+        self.assertEqual(sum(block["opcode"] == "procedures_call" for block in blocks), 1)
+
+    def test_wait_looks_motion_and_timer_builtins_lower_to_native_blocks(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    ResetTimer(); Wait(0.1); Say("hi"); ThinkFor("...", 1);
+                    Show(); SetSize(80); ChangeX(5); SetY(10); GlideTo(1, 0, 0);
+                    return Timer();
+                }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        opcodes = {block["opcode"] for block in project["targets"][1]["blocks"].values()}
+        self.assertTrue({
+            "control_wait", "looks_say", "looks_thinkforsecs", "looks_show", "looks_setsizeto",
+            "motion_changexby", "motion_sety", "motion_glidesecstoxy", "sensing_resettimer", "sensing_timer",
+        }.issubset(opcodes))
+
+    def test_constant_folding_removes_literal_arithmetic_blocks(self):
+        module = build("""
+            sprite Main { fn main() -> int { return -1 + 1; } }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        opcodes = {block["opcode"] for block in project["targets"][1]["blocks"].values()}
+        self.assertNotIn("operator_add", opcodes)
+        self.assertNotIn("operator_subtract", opcodes)
+
+    def test_unused_functions_and_literal_variables_are_not_emitted(self):
+        module = build("""
+            sprite Main {
+                fn unused() -> int { let hidden: int = 7; return hidden; }
+                fn main() -> int { let discarded: int = 123; return 0; }
+            }
+        """)
+        with tempfile.TemporaryDirectory() as directory:
+            path = compile_to_sb3(module, Path(directory) / "program.sb3")
+            with zipfile.ZipFile(path) as archive:
+                project = json.loads(archive.read("project.json"))
+
+        main = project["targets"][1]
+        procedure_names = {
+            block.get("mutation", {}).get("proccode", "")
+            for block in main["blocks"].values()
+            if block["opcode"] == "procedures_prototype"
+        }
+        variable_names = {value[0] for value in main["variables"].values()}
+        self.assertNotIn("unused", procedure_names)
+        self.assertFalse(any("discarded" in name for name in variable_names))
+
     def test_non_returning_statement_sequence_is_not_individually_guarded(self):
         module = build("""
             sprite Main {

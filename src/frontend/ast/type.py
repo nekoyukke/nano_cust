@@ -22,6 +22,10 @@ class BooleanType(BuildinType):
     pass
 
 @dataclass
+class RangeType(BuildinType):
+    pass
+
+@dataclass
 class ListType(BuildinType):
     element: Type
 

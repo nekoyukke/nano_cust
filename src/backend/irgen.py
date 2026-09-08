@@ -32,7 +32,7 @@ BOOLEAN_BUILTIN_REPORTERS = {"KeyPressed", "MousePressed", "Contains"}
 VALUE_BUILTIN_REPORTERS = {
     "MouseX", "MouseY", "Random", "Join", "LetterOf", "TextLength", "Round",
     "Abs", "Floor", "Ceil", "Sqrt", "Sin", "Cos", "Tan", "Asin", "Acos",
-    "Atan", "Ln", "Log", "Exp", "Exp10",
+    "Atan", "Ln", "Log", "Exp", "Exp10", "Timer",
 }
 
 class IRGenerator:
@@ -455,11 +455,12 @@ class IRGenerator:
         function_key = (sym, self.sprite_pos)
         function = self.module_function.get(function_key)
         if function is None:
-            function = Function(name, args, Block([]))
+            function = Function(name, args, Block([]), set(node.annotations))
         else:
             function.name = name
             function.params = args
             function.instr = Block([])
+            function.annotations = set(node.annotations)
         self.module_function[function_key] = function
         self.function_symbols[function] = sym
         return function
@@ -569,6 +570,23 @@ class IRGenerator:
                     if handle is not None:
                         initial.append(Move(handle, ImmExpr(Number(self.next_list_handle))))
                         self.next_list_handle += 1
+                    if isinstance(node.left, expr.RangeExpr):
+                        start = self.visit_expr(node.left.start)
+                        end = self.visit_expr(node.left.end)
+                        index = self.get_temp()
+                        bound = self.get_temp()
+                        body = Block([
+                            ListPush(storage, VariableExpr(index)),
+                            Move(index, Add(VariableExpr(index), ImmExpr(Number(1)))),
+                        ])
+                        return [
+                            *initial,
+                            *start.stmt,
+                            *end.stmt,
+                            Move(index, start.exp),
+                            Move(bound, end.exp),
+                            While(Lt(VariableExpr(index), VariableExpr(bound)), body),
+                        ]
                     return initial
                 if node.left:
                     left = self.visit_expr(node.left)
@@ -583,6 +601,8 @@ class IRGenerator:
             # 式・返値系
             case stmt.ExprStmt():
                 if isinstance(node.expr, expr.CallExpr):
+                    if self.call_is_pure(node.expr):
+                        return []
                     left = self.visit_expr(node.expr, discard_result=True)
                     return left.stmt
                 left = self.visit_expr(node.expr)
@@ -610,6 +630,30 @@ class IRGenerator:
                     body = self.visit_stmt_entry(node.loop)
                 return [*condition.stmt, While(condition.exp, body)]
             case stmt.ForEachStmt():
+                if isinstance(node.iterator, expr.RangeExpr):
+                    if not node.variable.sym:
+                        raise ValueError("unresolved range loop variable")
+                    element = self.sprite_variable.get(node.variable.sym)
+                    if element is None:
+                        element = self.new_variable(self._storage_name(node.variable.sym))
+                        self.sprite_variable[node.variable.sym] = element
+                        self.sprite[self.sprite_pos].variables.append(element)
+                    start = self.visit_expr(node.iterator.start)
+                    end = self.visit_expr(node.iterator.end)
+                    bound = self.get_temp()
+                    with self.reserve_temps():
+                        body = self.visit_stmt_entry(node.loop)
+                    body.instr = [
+                        *body.instr,
+                        Move(element, Add(VariableExpr(element), ImmExpr(Number(1)))),
+                    ]
+                    return [
+                        *start.stmt,
+                        *end.stmt,
+                        Move(element, start.exp),
+                        Move(bound, end.exp),
+                        While(Lt(VariableExpr(element), VariableExpr(bound)), body),
+                    ]
                 # The iteration bound is captured before the first iteration;
                 # appending to the list in the body therefore cannot extend
                 # this loop unexpectedly.
@@ -667,6 +711,24 @@ class IRGenerator:
             case _:
                 raise ValueError(f"Unknown statement node: {_type(node).__name__}")
 
+    def call_is_pure(self, node: expr.CallExpr) -> bool:
+        """A discarded @pure call has no observable result and can vanish."""
+        target = node.call
+        if isinstance(target, expr.Variable):
+            function_symbol = target.sym
+            if isinstance(function_symbol, symbol.MethodSymbol):
+                function_symbol = function_symbol.fnc
+        elif isinstance(target, expr.MemberExpr):
+            function_symbol = target.member.sym
+            if isinstance(function_symbol, symbol.MethodSymbol):
+                function_symbol = function_symbol.fnc
+        else:
+            return False
+        return (
+            isinstance(function_symbol, symbol.FunctionSymbol)
+            and "pure" in function_symbol.decl.annotations
+        )
+
     def visit_expr(self, node:expr.Expr, *, discard_result: bool = False) -> Expr_Result:
         """exprを返す関数。"""
         match node:
@@ -676,15 +738,20 @@ class IRGenerator:
                 right = self.visit_expr(node.right)
                 match (node.op):
                     case expr.BinaryKind.PLUS:
-                        return Expr_Result(Add(left.exp, right.exp), [*left.stmt, *right.stmt])
+                        value = self.fold_numbers(left.exp, right.exp, lambda a, b: a + b)
+                        return Expr_Result(value or Add(left.exp, right.exp), [*left.stmt, *right.stmt])
                     case expr.BinaryKind.MINUS:
-                        return Expr_Result(Sub(left.exp, right.exp), [*left.stmt, *right.stmt])
+                        value = self.fold_numbers(left.exp, right.exp, lambda a, b: a - b)
+                        return Expr_Result(value or Sub(left.exp, right.exp), [*left.stmt, *right.stmt])
                     case expr.BinaryKind.MULT:
-                        return Expr_Result(Mul(left.exp, right.exp), [*left.stmt, *right.stmt])
+                        value = self.fold_numbers(left.exp, right.exp, lambda a, b: a * b)
+                        return Expr_Result(value or Mul(left.exp, right.exp), [*left.stmt, *right.stmt])
                     case expr.BinaryKind.DIV:
-                        return Expr_Result(Div(left.exp, right.exp), [*left.stmt, *right.stmt])
+                        value = self.fold_numbers(left.exp, right.exp, lambda a, b: a / b if b else None)
+                        return Expr_Result(value or Div(left.exp, right.exp), [*left.stmt, *right.stmt])
                     case expr.BinaryKind.MOD:
-                        return Expr_Result(Mod(left.exp, right.exp), [*left.stmt, *right.stmt])
+                        value = self.fold_numbers(left.exp, right.exp, lambda a, b: a % b if b else None)
+                        return Expr_Result(value or Mod(left.exp, right.exp), [*left.stmt, *right.stmt])
                     case expr.BinaryKind.LOGIC_AND:
                         if not isinstance(left.exp, BoolExpr) or not isinstance(right.exp, BoolExpr):
                             raise TypeError("&& operands must be boolean")
@@ -712,6 +779,8 @@ class IRGenerator:
                 operand = self.visit_expr(node.expr)
                 if node.op is expr.UnaryKind.PLUS:
                     return operand
+                if isinstance(operand.exp, ImmExpr) and isinstance(operand.exp.value, Number):
+                    return Expr_Result(ImmExpr(Number(-operand.exp.value.value)), operand.stmt)
                 return Expr_Result(Sub(ImmExpr(Number(0)), operand.exp), operand.stmt)
             case expr.AssignExpr():
                 return self.visit_assign_expr(node)
@@ -773,7 +842,7 @@ class IRGenerator:
                         preceding,
                         capture_result=not discard_result,
                     )
-                if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop", "length"}:
+                if isinstance(node.call, expr.MemberExpr) and node.call.member.ident in {"push", "pop", "length", "clear"}:
                     if not isinstance(node.call.expr, expr.Variable) or not node.call.expr.sym:
                         raise NotImplementedError("list methods require a named list")
                     list_id = self.get_val_list(node.call.expr.sym)
@@ -790,6 +859,10 @@ class IRGenerator:
                         if values:
                             raise ValueError("list.length takes no arguments")
                         return Expr_Result(ListLength(list_id), preceding)
+                    if node.call.member.ident == "clear":
+                        if values:
+                            raise ValueError("list.clear takes no arguments")
+                        return Expr_Result(ImmExpr(Number(0)), [*preceding, ListReset(list_id)])
                     if values:
                         raise ValueError("list.pop takes no arguments")
                     if discard_result:
@@ -887,6 +960,15 @@ class IRGenerator:
             # 漏れ防止
             case _:
                 raise ValueError(f"Unknown expression node: {_type(node).__name__}")
+
+    def fold_numbers(self, left: Expr, right: Expr, operation) -> ImmExpr | None:
+        if not (
+            isinstance(left, ImmExpr) and isinstance(left.value, Number)
+            and isinstance(right, ImmExpr) and isinstance(right.value, Number)
+        ):
+            return None
+        value = operation(left.value.value, right.value.value)
+        return ImmExpr(Number(value)) if value is not None else None
 
     def emit_call(
         self,

@@ -98,6 +98,35 @@ class ListIRTests(unittest.TestCase):
         self.assertIsInstance(value_move, Move)
         self.assertIsInstance(value_move.value, ListLength)
 
+    def test_numeric_range_initializes_a_number_list(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let values: list int = 0..10;
+                    return values[9];
+                }
+            }
+        """)
+        instructions = module.sprites[0].func[0].instr.instr
+        loop = next(instruction for instruction in instructions if isinstance(instruction, While))
+        self.assertTrue(any(isinstance(instruction, ListPush) for instruction in loop.body.instr))
+
+    def test_list_clear_resets_the_list(self):
+        module = build("""
+            sprite Main {
+                fn main() -> int {
+                    let values: list int = 0..3;
+                    values.clear();
+                    return values.length();
+                }
+            }
+        """)
+        resets = [
+            instruction for instruction in module.sprites[0].func[0].instr.instr
+            if isinstance(instruction, ListReset)
+        ]
+        self.assertGreaterEqual(len(resets), 2)
+
 
 
 if __name__ == "__main__":

@@ -219,7 +219,53 @@ if KeyPressed("ArrowRight") { Move(MouseX(), MouseY()); }
 
 三角関数と逆三角関数の角度はラジアンではなく、Scratchと同じ**度数法**です。例えば `Sin(30)` は `0.5` になります。通常の数値演算は演算子 `+`、`-`、`*`、`/`、`%`、比較は `==`、`!=`、`<`、`<=`、`>`、`>=`、論理演算は `&&`、`||` を使用します。
 
-## 12. `save` と `unsave`
+## 12. 最適化アノテーション
+
+関数の直前に `@name` を置けます。複数指定も可能です。
+
+```text
+@inline
+@pure
+fn twice(value: number) -> number { return value * 2; }
+```
+
+| アノテーション | 用途 |
+| --- | --- |
+| `@inline` | 直線的で末尾 return の関数を呼び出し位置へ展開 |
+| `@leaf` | 組み込み関数以外を呼ばない関数であることを示す |
+| `@pure` | 外部状態を変更しない関数であることを示す |
+| `@unroll` | ループ展開候補として扱う |
+| `@consteval` | 定数引数でのコンパイル時計算候補として扱う |
+
+## 13. 待機・見た目・追加の動き・タイマー
+
+| 関数 | 動作 |
+| --- | --- |
+| `Wait(seconds)` | 指定秒数待機 |
+| `Say(text)` / `SayFor(text, seconds)` | 吹き出しを表示 |
+| `Think(text)` / `ThinkFor(text, seconds)` | 考え中の吹き出しを表示 |
+| `Show()` / `Hide()` | スプライトを表示／非表示 |
+| `NextCostume()` | 次のコスチュームへ切替 |
+| `SetSize(size)` / `ChangeSize(delta)` | 大きさを変更 |
+| `ClearEffects()` | 見た目エフェクトを消去 |
+| `SetX(x)` / `SetY(y)` | X / Y 座標を設定 |
+| `ChangeX(dx)` / `ChangeY(dy)` | X / Y 座標を相対移動 |
+| `GlideTo(seconds, x, y)` | 指定座標へ滑らかに移動 |
+| `ResetTimer()` / `Timer()` | Scratchタイマーをリセット／取得 |
+
+## 14. 数値範囲
+
+`start..end` は終端を含まない数値範囲です。`for` と組み合わせると、リストを確保せずカウンタループへ直接変換されます。
+
+```text
+for i in 1..10 {
+    // i は 1 から 9
+}
+```
+
+数値リストの初期値にも使えます。`let values: list int = 0..10;` は `0` から `9` を持つリストを作ります。リストを空にするには `values.clear();` を使います。
+
+## 15. `save` と `unsave`
 
 ```text
 save object;
@@ -228,7 +274,7 @@ unsave object;
 
 これらはオブジェクト参照を内部の保持登録から外す／登録する低レベル操作です。オブジェクトの解放や自動寿命管理は行いません。通常のプログラムでは使用不要です。
 
-## 13. 現在の制約
+## 16. 現在の制約
 
 - トップレベルに置けるのは `class` と `sprite` だけです。
 - `import` は未実装です。

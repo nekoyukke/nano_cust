@@ -57,6 +57,24 @@ BUILTIN_FUNCTIONS: dict[str, tuple[types.Type, list[types.Type]]] = {
     "Log": (types.NumberType(), [types.NumberType()]),
     "Exp": (types.NumberType(), [types.NumberType()]),
     "Exp10": (types.NumberType(), [types.NumberType()]),
+    "Wait": (types.NumberType(), [types.NumberType()]),
+    "Say": (types.NumberType(), [types.StringType()]),
+    "SayFor": (types.NumberType(), [types.StringType(), types.NumberType()]),
+    "Think": (types.NumberType(), [types.StringType()]),
+    "ThinkFor": (types.NumberType(), [types.StringType(), types.NumberType()]),
+    "Show": (types.NumberType(), []),
+    "Hide": (types.NumberType(), []),
+    "NextCostume": (types.NumberType(), []),
+    "SetSize": (types.NumberType(), [types.NumberType()]),
+    "ChangeSize": (types.NumberType(), [types.NumberType()]),
+    "ClearEffects": (types.NumberType(), []),
+    "SetX": (types.NumberType(), [types.NumberType()]),
+    "SetY": (types.NumberType(), [types.NumberType()]),
+    "ChangeX": (types.NumberType(), [types.NumberType()]),
+    "ChangeY": (types.NumberType(), [types.NumberType()]),
+    "GlideTo": (types.NumberType(), [types.NumberType(), types.NumberType(), types.NumberType()]),
+    "ResetTimer": (types.NumberType(), []),
+    "Timer": (types.NumberType(), []),
 }
 
 class Resolver():
@@ -208,7 +226,11 @@ class Resolver():
     def visit_foreach(self, node:stmt.ForEachStmt):
         # (=^.^=) < hello ~
         itt_tp = self.visit_expr(node.iterator)
-        if not isinstance(itt_tp, types.ListType):
+        if isinstance(itt_tp, types.RangeType):
+            element_type: types.Type = types.NumberType()
+        elif isinstance(itt_tp, types.ListType):
+            element_type = itt_tp.element
+        else:
             self.CallError(f"繰り返し不可能な入力。{itt_tp}", node)
             return False
         self.scope = self.scope.push() # push corn
@@ -218,7 +240,7 @@ class Resolver():
             node
         )
         self.scope.sym[node.variable.ident] = sym
-        self.ctx.val_type[sym] = itt_tp.element
+        self.ctx.val_type[sym] = element_type
         node.variable.sym = sym
         ret = self.visit_stmt(node.loop)
         self.scope = self.scope.pop() # pop corn!!!
@@ -257,7 +279,12 @@ class Resolver():
         tp:types.Type = self.TypeDef2Type(node.contract)
         if node.left:
             if (tp_left := self.visit_expr(node.left)):
-                if tp != tp_left:
+                range_initializer = (
+                    isinstance(tp, types.ListType)
+                    and isinstance(tp.element, types.NumberType)
+                    and isinstance(tp_left, types.RangeType)
+                )
+                if tp != tp_left and not range_initializer:
                     self.CallTypeError(f"型が違います。設定元:{tp}, 検知先: {tp_left}", node)
         node.tp = tp
         sym = symbol.VariableSymbol(
@@ -459,6 +486,13 @@ class Resolver():
                     return lt
                 self.CallTypeError(f"型が違います。{lt}と{rt}", node)
                 return lt if self.force_type else None
+            case expr.RangeExpr():
+                start = self.visit_expr(node.start)
+                end = self.visit_expr(node.end)
+                if isinstance(start, types.NumberType) and isinstance(end, types.NumberType):
+                    return types.RangeType()
+                self.CallTypeError("数値範囲の両端は number 型である必要があります。", node)
+                return types.RangeType() if self.force_type else None
             case expr.UnaryExpr():
                 operand_type = self.visit_expr(node.expr)
                 if not isinstance(operand_type, types.NumberType):
@@ -555,6 +589,8 @@ class Resolver():
                         if node.member.ident == "pop":
                             return types.Function(base.element, [])
                         if node.member.ident == "length":
+                            return types.Function(types.NumberType(), [])
+                        if node.member.ident == "clear":
                             return types.Function(types.NumberType(), [])
                     case types.StringType():
                         pass

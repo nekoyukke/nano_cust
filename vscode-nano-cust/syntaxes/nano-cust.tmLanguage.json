@@ -3,7 +3,7 @@
   "name": "nano_cust",
   "scopeName": "source.nano-cust",
   "patterns": [
-    { "include": "#comments" }, { "include": "#strings" }, { "include": "#declarations" },
+    { "include": "#comments" }, { "include": "#strings" }, { "include": "#annotations" }, { "include": "#declarations" },
     { "include": "#variable-declarations" }, { "include": "#types" }, { "include": "#keywords" },
     { "include": "#builtins" }, { "include": "#member-access" }, { "include": "#function-calls" },
     { "include": "#constants" }, { "include": "#numbers" }, { "include": "#operators" },
@@ -12,6 +12,10 @@
   "repository": {
     "comments": { "patterns": [{ "name": "comment.line.double-slash.nano-cust", "match": "//.*$" }] },
     "strings": { "patterns": [{ "name": "string.quoted.double.nano-cust", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.nano-cust", "match": "\\\\(?:[\\\"\\\\nrt]|.)" }] }] },
+    "annotations": { "patterns": [
+      { "match": "(@)(?:inline|leaf|pure|unroll|consteval)\\b", "captures": { "1": { "name": "punctuation.definition.annotation.nano-cust" }, "0": { "name": "storage.modifier.annotation.nano-cust" } } },
+      { "match": "@[A-Za-z_][A-Za-z0-9_]*\\b", "name": "storage.modifier.annotation.nano-cust" }
+    ] },
     "declarations": { "patterns": [
       { "match": "\\b(class)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.class.nano-cust" }, "2": { "name": "entity.name.class.nano-cust" } } },
       { "match": "\\b(sprite)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.sprite.nano-cust" }, "2": { "name": "entity.name.class.nano-cust" } } },
@@ -31,11 +35,16 @@
       { "name": "keyword.control.import.nano-cust", "match": "\\bimport\\b" }
     ] },
     "builtins": { "patterns": [
-      { "name": "support.function.builtin.nano-cust", "match": "\\b(?:Move|MoveSteps|TurnRight|TurnLeft|SetDirection|PenDown|PenUp|PenColor|PenSize|ClearPen)\\b(?=\\s*\\()" },
-      { "name": "support.function.collection.nano-cust", "match": "\\b(?:push|pop|length)\\b(?=\\s*\\()" }
+      { "name": "support.function.motion.nano-cust", "match": "\\b(?:Move|MoveSteps|TurnRight|TurnLeft|SetDirection|SetX|SetY|ChangeX|ChangeY|GlideTo)\\b(?=\\s*\\()" },
+      { "name": "support.function.looks.nano-cust", "match": "\\b(?:Say|SayFor|Think|ThinkFor|Show|Hide|NextCostume|SetSize|ChangeSize|ClearEffects)\\b(?=\\s*\\()" },
+      { "name": "support.function.sensing.nano-cust", "match": "\\b(?:KeyPressed|MousePressed|MouseX|MouseY|Timer|ResetTimer)\\b(?=\\s*\\()" },
+      { "name": "support.function.control.nano-cust", "match": "\\bWait\\b(?=\\s*\\()" },
+      { "name": "support.function.math.nano-cust", "match": "\\b(?:Random|Round|Abs|Floor|Ceil|Sqrt|Sin|Cos|Tan|Asin|Acos|Atan|Ln|Log|Exp|Exp10)\\b(?=\\s*\\()" },
+      { "name": "support.function.string.nano-cust", "match": "\\b(?:Join|LetterOf|TextLength|Contains)\\b(?=\\s*\\()" },
+      { "name": "support.function.collection.nano-cust", "match": "\\b(?:push|pop|length|clear)\\b(?=\\s*\\()" }
     ] },
     "member-access": { "patterns": [
-      { "match": "(\\.)\\s*(push|pop|length)\\b(?=\\s*\\()", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "support.function.collection.nano-cust" } } },
+      { "match": "(\\.)\\s*(push|pop|length|clear)\\b(?=\\s*\\()", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "support.function.collection.nano-cust" } } },
       { "match": "(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b(?=\\s*\\()", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "entity.name.function.call.nano-cust" } } },
       { "match": "(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "punctuation.accessor.nano-cust" }, "2": { "name": "variable.other.property.nano-cust" } } }
     ] },
@@ -44,6 +53,7 @@
     "numbers": { "patterns": [{ "name": "constant.numeric.nano-cust", "match": "(?<![A-Za-z0-9_])(?:\\d+\\.\\d+|\\d+)(?![A-Za-z0-9_])" }] },
     "operators": { "patterns": [
       { "name": "keyword.operator.logical.nano-cust", "match": "&&|\\|\\|" },
+      { "name": "keyword.operator.range.nano-cust", "match": "\\.\\." },
       { "name": "keyword.operator.comparison.nano-cust", "match": "==|!=|<=|>=|<|>" },
       { "name": "keyword.operator.assignment.nano-cust", "match": "=" },
       { "name": "keyword.operator.arithmetic.nano-cust", "match": "(?:->|[+\\-*/%])" }

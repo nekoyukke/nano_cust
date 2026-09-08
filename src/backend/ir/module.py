@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from src.backend.ir.instr import *
 
 from src.backend.ir.flow import *
@@ -8,6 +8,7 @@ class Function():
     name: str
     params: list[Variable]
     instr: Block
+    annotations: set[str] = field(default_factory=set)
     def __repr__(self) -> str:
         return self.format_repr()
     def format_repr(self, indent: int = 0) -> str:
