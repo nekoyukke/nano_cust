@@ -986,6 +986,7 @@ class IRGenerator:
         after the callee has produced its result.
         """
         result = self.get_temp() if capture_result else None
+        is_leaf = "leaf" in callee.annotations
         # ListGet/ListDelete take zero-based IR indices.  The last Scratch
         # item is therefore length - 1, not length (which would be lowered to
         # Scratch's out-of-range length + 1).
@@ -1003,6 +1004,26 @@ class IRGenerator:
         list_transfers = list_transfers or []
         copy_in = [instruction for source, destination in list_transfers for instruction in self.copy_list(source, destination)]
         copy_out = [instruction for source, destination in list_transfers for instruction in self.copy_list(destination, source)]
+        changes_object = (
+            receiver is not None
+            and not (isinstance(receiver, VariableExpr) and receiver.value is self.current_object)
+        )
+        if is_leaf:
+            saved_object = self.get_temp() if changes_object else None
+            instructions: list[Stmt] = [
+                *preceding,
+                *copy_in,
+                *([Move(saved_object, VariableExpr(self.current_object))] if saved_object else []),
+                *([Move(self.current_object, target)] if changes_object else []),
+                Call(callee, params),
+                *([Move(result, VariableExpr(self.return_value))] if result is not None else []),
+                *([Move(self.current_object, VariableExpr(saved_object))] if saved_object else []),
+                *copy_out,
+            ]
+            return Expr_Result(
+                VariableExpr(result) if result is not None else ImmExpr(Number(0)),
+                instructions,
+            )
         instructions: list[Stmt] = [
             *preceding,
             *copy_in,

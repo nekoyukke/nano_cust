@@ -13,7 +13,7 @@
     "comments": { "patterns": [{ "name": "comment.line.double-slash.nano-cust", "match": "//.*$" }] },
     "strings": { "patterns": [{ "name": "string.quoted.double.nano-cust", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.nano-cust", "match": "\\\\(?:[\\\"\\\\nrt]|.)" }] }] },
     "annotations": { "patterns": [
-      { "match": "(@)(?:inline|leaf|pure|unroll|consteval)\\b", "captures": { "1": { "name": "punctuation.definition.annotation.nano-cust" }, "0": { "name": "storage.modifier.annotation.nano-cust" } } },
+      { "match": "(@)(?:inline|leaf|pure)\\b", "captures": { "1": { "name": "punctuation.definition.annotation.nano-cust" }, "0": { "name": "storage.modifier.annotation.nano-cust" } } },
       { "match": "@[A-Za-z_][A-Za-z0-9_]*\\b", "name": "storage.modifier.annotation.nano-cust" }
     ] },
     "declarations": { "patterns": [

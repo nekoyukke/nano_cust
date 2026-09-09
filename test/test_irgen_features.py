@@ -277,6 +277,33 @@ class IRGeneratorFeatureTests(unittest.TestCase):
         instructions = module.sprites[0].func[0].instr.instr
         self.assertTrue(any(isinstance(instruction, While) for instruction in instructions))
 
+    def test_leaf_call_avoids_the_return_stack(self):
+        module = build("""
+            sprite Main {
+                @leaf
+                fn increment(value: int) -> int { return value + 1; }
+                fn main() -> int { return increment(2); }
+            }
+        """)
+        instructions = module.sprites[0].func[-1].instr.instr
+        self.assertTrue(any(isinstance(instruction, Call) for instruction in instructions))
+        self.assertFalse(any(
+            isinstance(instruction, ListPush)
+            and instruction.list_id.list_name.endswith("__ReturnStack__")
+            for instruction in instructions
+        ))
+
+    def test_discarded_pure_call_is_removed(self):
+        module = build("""
+            sprite Main {
+                @pure
+                fn value() -> int { return 1; }
+                fn main() -> int { value(); return 0; }
+            }
+        """)
+        instructions = module.sprites[0].func[-1].instr.instr
+        self.assertFalse(any(isinstance(instruction, Call) for instruction in instructions))
+
 
 if __name__ == "__main__":
     unittest.main()

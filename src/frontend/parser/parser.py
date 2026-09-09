@@ -353,6 +353,11 @@ class Parser():
         while self.check(TokenType.AT):
             self.advance()
             annotation = self.consume(TokenType.ID, "@ の後にはアノテーション名が必要です")
+            if annotation.value not in {"inline", "leaf", "pure"}:
+                self.CallError(
+                    f"未対応のアノテーション: @{annotation.value}",
+                    _base.ASTNode(annotation.line, annotation.column - 1, annotation.len + 1),
+                )
             annotations.append(annotation.value)
         define_token = self.advance()
         if define_token.type != TokenType.FN:

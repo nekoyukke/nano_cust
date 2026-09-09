@@ -481,7 +481,7 @@ class SB3Emitter:
     def can_inline(self, function: Function) -> bool:
         """Inline only straight-line, terminal-return functions safely."""
         return (
-            bool({"inline", "consteval"} & function.annotations)
+            "inline" in function.annotations
             and self.function_owner[function] == self.current_sprite_index
             and bool(function.instr.instr)
             and isinstance(function.instr.instr[-1], Return)
